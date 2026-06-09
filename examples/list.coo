@@ -1,0 +1,52 @@
+fun range x y = do => {
+  if | x > y => go Nil
+	   |       => go Cons[x, range (x+1) y]
+};
+
+fun | take 0 _          = Nil
+    | take n Cons[x,xs] = Cons[x, take (n-1) xs];
+
+fun | drop 0 xs         = xs
+    | drop n Cons[x,xs] = drop (n-1) xs
+    | drop _ Nil        = Nil;
+
+fun map {f} where
+  | _    Nil        = Nil
+  | loop Cons[x,xs] = Cons[f x, loop xs];
+
+fun | zip Cons[x,xs] Cons[y,ys] = Cons[(x,y), zip xs ys]
+    | zip _          _          = Nil;
+
+fun zipWith {f} where
+  | zwf Cons[x,xs] Cons[y,ys] = Cons[f x y, zwf xs ys]
+  | zwf _          _          = Nil;
+
+fun filterPass {p}
+  | go fp Nil        to {_}, {same} = go to same
+  | go fp Cons[x,xs] to {diff}, {same} = {
+    if | p x => go fp xs
+                to {do xs' => go Cons[x,xs'] to diff},
+                   {same}
+       |     => go fp xs
+                to {diff},
+                   {do () => go xs to diff}
+  };
+
+fun go filter {p} xs to {start} = {
+    val () = filterPass {p} xs {start};
+    go xs to start
+};
+
+val one_ten = range 1 10;
+
+pprint one_ten;
+
+val squares = map {fn x => x*x} one_ten;
+
+pprint squares;
+
+val evens = filter {fn x => x % 2 == 0} squares;
+val odds = filter {fn x => x % 2 /= 0} squares;
+
+pprint evens;
+pprint odds;

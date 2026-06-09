@@ -1,0 +1,86 @@
+cabal-version:      3.0
+name:               coo
+version:            0.1.0.0
+synopsis:           A friendly programming language to talk about co-things.
+
+author:             Paul Downen
+maintainer:         paul@pauldownen.com
+
+license:            MIT
+license-file:       LICENSE
+copyright:          Copyright (c) 2025 Paul Downen
+
+category:           Compilers/Interpreters
+build-type:         Simple
+
+extra-doc-files:    CHANGELOG.md,
+                    README.md,
+
+extra-source-files: examples/list.coo,
+                    examples/stream.coo,
+
+common warnings
+    ghc-options: -Wextra
+
+library
+    import:           warnings
+
+    exposed-modules:  Coo.Source.Syntax,
+                      Coo.Source.Parse,
+                      Coo.Source.Print,
+                      Coo.Source.Polarity,
+                      Coo.Source.Simplify,
+                      Coo.Source.Desugar,
+                      Coo.DualCore.Syntax,
+                      Coo.DualCore.Sugar,
+                      Coo.DualCore.Print,
+                      Coo.DualCore.Run,
+                      Coo.DualCore.Focus,
+                      Coo.DualCore.Polarity,
+                      Coo.REPL.Inside,
+                      Coo.Grammar.Lexer,
+                      Coo.Grammar.Fixity,
+                      Coo.Data.Namespace,
+
+    build-depends:    base >=4.21,
+                      containers >= 0.7,
+                      exceptions >= 0.10.12,
+                      haskeline >= 0.8.4.1,
+                      megaparsec >= 9.7,
+                      mtl >= 2.3,
+                      prettyprinter >= 1.7,
+                      text >= 2.1.3,
+                      transformers >= 0.6
+
+    hs-source-dirs:   src
+
+    default-language: Haskell2010
+
+executable coo
+    import:           warnings
+
+    main-is:          Main.hs
+
+    build-depends:
+                  base >=4.21,
+                  coo,
+                  text >= 2.1.3
+
+    hs-source-dirs:   app
+
+    default-language: Haskell2010
+
+test-suite coo-test
+    import:           warnings
+
+    default-language: Haskell2010
+
+    type:             exitcode-stdio-1.0
+
+    hs-source-dirs:   test
+
+    main-is:          Main.hs
+
+    build-depends:
+        base >=4.21,
+        coo,
