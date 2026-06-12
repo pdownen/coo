@@ -85,7 +85,7 @@ desugarStmt' (SetMatch p t Nothing handle) c
        let r1 = p `Rest` Exec c
        rs' <- desugarReactsTop (r1 `setHandler` handle)
        return $ DC.NoOther $ DC.Cut t' DC.CheckCBV (DC.Cod rs')
-desugarStmt' (SetMatch p t (Just (Guard q u (Exec []))) handle) c
+desugarStmt' (SetMatch p t (Just (q, u)) handle) c
   = do t' <- desugarTerm t
        let r1 = p `Rest` Guard q u (Exec c)
        rs' <- desugarReactsTop (r1 `setHandler` handle)

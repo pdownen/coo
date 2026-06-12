@@ -138,7 +138,7 @@ basicCommand =  braces command
             <?> "basic command"
 
 command :: Parser Command
-command =  concat <$> (basicCommand `sepEndBy` semicolon)
+command =  statement `sepEndBy` semicolon
        <?> "command"
 
 statementInit :: Parser String
@@ -336,9 +336,11 @@ reactIf, reactIf1 :: Parser Reaction -> Parser Reaction
 reactIf1 rhs =  Guard <$> optional guardPattern <*> try nonemptyTerm
                       <*> reactNest (reactIf rhs) rhs
             <?> "conditional reaction"
-  where guardPattern =  val_ *> pat <* (takes <|> equal)
-                    <|> try (pat <* takes)
-                    <?> "guard pattern"
+
+guardPattern :: Parser Pattern
+guardPattern =  val_ *> pat <* (takes <|> equal)
+            <|> try (pat <* takes)
+            <?> "guard pattern"
 
 reactIf rhs =  reactIf1 rhs
            <|> reactNest (reactIf rhs) rhs
@@ -349,8 +351,9 @@ reactLetFun rhs =  LetFun <$> defFun gives <*> reactSwitch rhs
 reactElse :: Parser Reaction -> Parser Reaction
 reactElse rhs = Else <$> parameter <*> reactSwitch rhs
 
-reactCaveat :: Parser Reaction
-reactCaveat = reactIf (pure Cede)
+reactCaveat :: Parser SetCaveat
+reactCaveat =  (,) <$> optional guardPattern <*> nonemptyTerm
+           <?> "caveat"
 
 reactEq, reactEq1 :: Parser def -> Parser Reaction
 reactEq1 def =  Rec <$> (go_ *> copat)

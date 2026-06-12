@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -201,6 +202,8 @@ polarizeGuard Cede          = return Cede
 polarizeGuard (r1 `Alt` r2) = Alt <$> polarizeGuard r1 <*> polarizeGuard r2
 polarizeGuard r             = throwError $ MispolarReaction Nothing r
 
+polarizeCaveat :: (MonadPolar m) => SetCaveat -> m SetCaveat
+polarizeCaveat (p, t) = (p,) <$> polarizeTerm CBV t
 
 polarizeStmt :: (MonadPolar m) => Statement -> m Statement
 polarizeStmt (Run t)                = Run <$> polarizeTerm CBV t
@@ -211,7 +214,7 @@ polarizeStmt (Case t r)             = Case <$> polarizeTerm CBV t <*> polarizeRe
 polarizeStmt (If r)                 = If <$> polarizeGuard r
 polarizeStmt (SetMatch p t grd els) = do
   t' <- polarizeTerm CBV t
-  grd' <- traverse (polarizeReact CBN) grd
+  grd' <- traverse polarizeCaveat grd
   els' <- traverse (polarizeReact CBN) els
   return $ SetMatch p t' grd' els'
 
@@ -237,6 +240,7 @@ polarizeStmt c@(Go u Nothing t)    = do
       return $ autoGoTo u' s1 (opStrat s2) t'
     _ -> throwError $ UnpolarizedCommand c
 
+polarizeGoToTarget :: (MonadPolar m) => Strat -> Maybe Term -> m (Maybe Term)
 polarizeGoToTarget s (Just t) = Just <$> polarizeTerm s t
 polarizeGoToTarget s Nothing  = do polarizeTerm s (Var (Implicit Context))
                                    return Nothing
@@ -267,10 +271,12 @@ bindCopatPolarity :: (MonadReader PolInEnv m) => CoPattern -> m a -> m a
 bindCopatPolarity q = local (copatPolarityEnv q <>)
 
 stmtPolarityEnv :: Statement -> PolInEnv
-stmtPolarityEnv (LocalFun r)
-  | Just x <- extractSelfName r    = PolIn $ M.singleton x CBN
-stmtPolarityEnv (SetMatch p _ _ _) = patPolarityEnv p
-stmtPolarityEnv _                  = PolIn M.empty
+stmtPolarityEnv s = case s of
+  LocalFun r
+    | Just x <- extractSelfName r   -> PolIn $ M.singleton x CBN
+  SetMatch p _ (Just (Just q, _)) _ -> patPolarityEnv q <> patPolarityEnv p
+  SetMatch p _ _                  _ -> patPolarityEnv p
+  _                                 -> PolIn M.empty
 
 cmdPolarityEnv :: Command -> PolInEnv
 cmdPolarityEnv cmd = foldMap stmtPolarityEnv cmd

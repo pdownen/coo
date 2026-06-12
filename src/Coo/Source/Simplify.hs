@@ -191,6 +191,9 @@ simplifyReactsStm s = case s of
   Run t            -> Run (simplifyReactsTrm t)
   LocalFun r       -> LocalFun (simplifyReacts r)
   SetMatch p t c h ->
-    SetMatch p (simplifyReactsTrm t) (simplifyReacts <$> c) (simplifyReacts <$> h)
+    SetMatch p (simplifyReactsTrm t) (simplifyReactsCaveat <$> c) (simplifyReacts <$> h)
   If r             -> If (simplifyReacts r)
   Case t r         -> Case (simplifyReactsTrm t) (simplifyReacts r)
+
+simplifyReactsCaveat :: SetCaveat -> SetCaveat
+simplifyReactsCaveat (p, t) = (p, simplifyReactsTrm t)

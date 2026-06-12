@@ -42,11 +42,14 @@ instance Pretty Statement where
   pretty (SetMatch p t grd els)
     = align $ vsep $ catMaybes
       [ Just $ pretty "val" <+> prettyComplexPat p <+> pretty "=" <+> pretty t,
-        (pretty "if" <+>) <$> fmap (align . prettyReact GuardMode) grd,
+        (pretty "if" <+>) <$> fmap (align . prettyCaveat) grd,
         (pretty "else" <+>) <$> fmap (align . prettyReact WholeMode) els ]
 
   -- pretty-printing Command = [Statement]
   prettyList cs = align $ vsep $ fmap pretty cs
+
+prettyCaveat :: SetCaveat -> Doc ann
+prettyCaveat (pat, chk) = prettyReact GuardMode $ Guard pat chk Cede
 
 instance Pretty Term where
   pretty = prettyComplexTerm

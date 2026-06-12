@@ -31,10 +31,12 @@ data Statement
   = Go Term (Maybe Annotation) (Maybe Term)
   | Run Term
   | LocalFun Reaction
-  | SetMatch Pattern Term (Maybe Reaction) (Maybe Reaction)
+  | SetMatch Pattern Term (Maybe SetCaveat) (Maybe Reaction)
   | If Reaction
   | Case Term Reaction
   deriving (Show)
+
+type SetCaveat = (Maybe Pattern, Term)
 
 type Command = [Statement]
 
