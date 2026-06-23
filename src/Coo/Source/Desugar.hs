@@ -22,8 +22,10 @@ type CoreSelf = Maybe CoreParam
 type CoreLit = Literal
 type CorePat = DC.Pat CoreLit CoreParam CoreParam
 type CoreCoPat = DC.CoPat CoreLit CoreId CoreId
-type CoreStack = DC.Pat CoreLit CoreTrm CoreTrm
 type CoreType = DC.Type Variable CoreLit
+
+type CoreValue = DC.Val CoreId CoreLit CorePole CoreId CoreId
+type CoreStack = CoreValue
 
 type CoreCmd = DC.Cmd CoreId CoreLit CorePole
 type CoreTrm = DC.Trm CoreId CoreLit CorePole
@@ -33,7 +35,6 @@ type CoreStm = CoreCmd -> CoreCmd
 data DesugarError = UnexpectedSelfless Reaction
                   | UnderReaction Command
                   | OverReaction Reaction
-                  | BadSetGuard Statement
                   deriving (Show)
 
 instance Pretty DesugarError where
@@ -46,9 +47,6 @@ instance Pretty DesugarError where
   pretty (OverReaction r) = vsep
     [ pretty "The reaction has already consumed everything, but asks for more in:",
       indent 4 $ pretty r ]
-  pretty (BadSetGuard s) = vsep
-    [ pretty "Ill-formed guard to a pattern-matching value assignment:",
-      indent 4 $ pretty s ]
 
 type DesugarMonad m = (MonadError DesugarError m)
 
@@ -90,8 +88,6 @@ desugarStmt' (SetMatch p t (Just (q, u)) handle) c
        let r1 = p `Rest` Guard q u (Exec c)
        rs' <- desugarReactsTop (r1 `setHandler` handle)
        return $ DC.NoOther $ DC.Cut t' DC.CheckCBV (DC.Cod rs')
-desugarStmt' s@(SetMatch _ _ _ _) _
-  = throwError $ BadSetGuard s
 desugarStmt' (Case t r) c
   = do t' <- desugarTerm t
        rs' <- desugarReactsTop r
@@ -116,39 +112,16 @@ desugarTerm (Pair v w)  = DC.Pair <$> desugarTerm v <*> desugarTerm w
 desugarTerm (Do rs)     = desugarReactTm rs
 desugarTerm (Fn rs)     = desugarTerm (Do rs)
 desugarTerm (Obj u)     = DC.Obj <$> desugarTerm u
-{-
 desugarTerm (App u v)   = DC.App <$> desugarTerm u <*> desugarTerm v
 desugarTerm (Dot u i)   = DC.Dot <$> desugarTerm u <*> pure i
 desugarTerm (Call u)    = DC.Call <$> desugarTerm u
 desugarTerm (Shift p t) = explicateShift p <$> desugarTerm t
--}
-desugarTerm t@(App _ _) = DC.DoHere <$> desugarTermTo t (DC.A DC.HereVar)
-desugarTerm t@(Dot _ _) = DC.DoHere <$> desugarTermTo t (DC.A DC.HereVar)
-desugarTerm (Call t)    = DC.DoHere <$> desugarTermTo t (DC.C DC.HereVar)
-desugarTerm (Shift p t) = case explicateShiftCxt p of
-  Left f  -> f <$> desugarTerm t
-  Right k -> DC.DoHere <$> desugarTermTo t k
-
-desugarTermTo :: DesugarMonad m
-              => Term -> CoreStack -> m CoreCmd
-desugarTermTo (App u v) k = do
-  v <- desugarTerm v
-  desugarTermTo u (DC.Push v k)
-desugarTermTo (Dot u i) k = do
-  desugarTermTo u (i DC.:@: k)
-desugarTermTo t         k =
-  DC.Cut <$> desugarTerm t <*> pure DC.ToGo <*> pure (DC.New k)
 
 explicateShift :: PolarityShift -> CoreTrm -> CoreTrm
 explicateShift (PS CBV You) = DC.Call
 explicateShift (PS CBN You) = DC.Return
 explicateShift (PS CBV Me)  = DC.Thunk
 explicateShift (PS CBN Me)  = DC.Force
-
-explicateShiftCxt :: PolarityShift
-                  -> Either (CoreTrm -> CoreTrm) (CoreStack)
-explicateShiftCxt (PS CBV You) = Right $ DC.C DC.HereVar
-explicateShiftCxt p            = Left $ explicateShift p
 
 desugarPat :: Pattern -> CorePat
 desugarPat (Any x)        = DC.A $ desugarParam x
