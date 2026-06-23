@@ -53,6 +53,7 @@ type DesugarMonad m = (MonadError DesugarError m)
 desugarCmd :: (DesugarMonad m)
            => Command -> m CoreCmd
 desugarCmd []      = return DC.GoToJoin
+desugarCmd [Run t] = desugarStmt (Go t Nothing Nothing) []
 desugarCmd (s:c)   = desugarStmt s c
 
 simplifyIdAlias :: CoreCmd -> CoreCmd
@@ -196,63 +197,15 @@ irrefutableReact r = case r of
   _          -> Nothing
   where goHere t = Go t (Just $ OfPolarity CBN) (Just $ Var $ Implicit Here)
 
-{-
-desugarReact :: (DesugarMonad m, MonadReader (CorePat -> CorePat) m)
-             => Reaction -> m CoreRsp
-desugarReact (Eval t)             = do
-  t' <- desugarTerm t
-  return $ DC.DefaultCoPat DC.:=> DC.GoHere t' DC.CheckCBN
-desugarReact (p `Rest` r)         = do
-  let p' = desugarPat p
-  c' <- desugarGuard r
-  return $ DC.NonRecCoPat p' DC.:=> c'
-desugarReact (p `Pop` r)          = do
-  let p' = desugarPat p
-  r' <- local (. (p' DC.:*:)) $ desugarReact r
-  let q = p' DC.:*: DC.HerePat
-  return
-    $ (DC.NonRecCoPat q DC.:=>)
-    $ contextualizeOther q
-    $ DC.TryHere r'
-desugarReact (i `Proj` r)         = do
-  r' <- local (. (i DC.:@:)) $ desugarReact r
-  let q = i DC.:@: DC.HerePat
-  return
-    $ (DC.NonRecCoPat q DC.:=>)
-    $ contextualizeOther q
-    $ DC.TryHere r'
-desugarReact (q `Rec` r)   = do
-  let x' DC.:.: p' = desugarCoPat q DC.HerePat
-  cxt <- ask
-  let cxt' = DC.getPat . desugarCoPat q
-  r' <- local (. cxt') $ desugarReact r
-  return
-    $ (DC.NonRecCoPat p' DC.:=>)
-    $ contextualizeSelf x' (cxt DC.HerePat )
-    $ contextualizeOther p'
-    $ DC.TryHere r'
-desugarReact (Guard Nothing t r)  = desugarReact $ Guard (Just TruePat) t r
-desugarReact (Guard (Just p) t r) = do
-  t' <- desugarTerm t
-  let p' = desugarPat p
-  r' <- desugarReact r
-  let guarded = DC.Guard $ DC.NonRecCoPat p' DC.:=> DC.TryHere r'
-  return $ DC.DefaultCoPat DC.:=> DC.Cut t' DC.CheckCBV guarded
-desugarReact Cede                 = return DC.Cede
-desugarReact (r1 `Alt` r2)        = do
-  r1' <- desugarReacts r1
-  r2' <- desugarReacts r2
-  let t1 = DC.GoHere (DC.Cod r1') DC.CheckCBN
-  let t2 = DC.Cod r2'
-  return $ DC.DefaultCoPat DC.:=> DC.LocalAlt t2 t1
-desugarReact (Exec c)             = throwError $ UnderReaction c
--}
-
 desugarReactCmd :: (DesugarMonad m, MonadReader (CorePat -> CorePat) m)
              => Reaction -> m CoreCmd
 desugarReactCmd (Eval t)             = do
   t' <- desugarTerm t
   return $ DC.GoHere t' DC.CheckCBN
+desugarReactCmd (Exec c)             = do
+  c' <- desugarCmd c
+  let t = DC.Act (Internal DC.Context) c'
+  return $ DC.GoHere t DC.CheckCBN
 desugarReactCmd (p `Rest` r)         = do
   let p' = desugarPat p
   c' <- desugarGuard r
@@ -318,7 +271,6 @@ desugarReactCmd (Else x r)           = do
   return
     $ DC.LocalAct (desugarParam x) DC.OtherVar
     $ c'
-desugarReactCmd (Exec c)             = throwError $ UnderReaction c
 
 contextualizeSelf :: CoreSelf -> CorePat -> CoreCmd -> CoreCmd
 contextualizeSelf Nothing     _          = id
@@ -338,6 +290,7 @@ renameSelf name               c = DC.Cut DC.SelfVar DC.CheckCBN (DC.Act name c)
 desugarGuard :: (DesugarMonad m)
              => Reaction -> m CoreCmd
 desugarGuard (Exec c)             = desugarCmd c
+desugarGuard (Eval t)             = desugarGuard $ Exec [Go t Nothing Nothing]
 desugarGuard (Guard Nothing t r)  = desugarGuard $ Guard (Just TruePat) t r
 desugarGuard (Guard (Just p) t r) = do
   t' <- desugarTerm t
