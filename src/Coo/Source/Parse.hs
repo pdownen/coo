@@ -20,7 +20,7 @@ type Symbol  = String
 
 keywordList :: [Keyword]
 keywordList = ["co", "val", "fun", "data", "type",
-               "let", "in", "where",
+               "let", "in", "where", "rec",
                "do", "go", "as", "to", "fn",
                "match", "with", "case", "of",
                "if", "then", "else",
@@ -44,6 +44,7 @@ type_  = kw "type"
 let_   = kw "let"
 in_    = kw "in"
 where_ = kw "where"
+rec_   = kw "rec"
 do_    = kw "do"
 go_    = kw "go"
 as_    = kw "as"
@@ -62,7 +63,8 @@ cbn_   = kw "cbn"
 keysymbolList :: [Symbol]
 keysymbolList = ["=", "=>", "<=", "|",
                  ".", "..", "...",
-                 ",", ";", "!", "?"]
+                 ",", ";", "!", "?",
+                 ":", "::"]
 
 keysymbol :: Parser Symbol
 keysymbol = keysymbolFrom keysymbolList
@@ -111,10 +113,21 @@ literal =  Flt <$> float
 defVal :: Parser def -> Parser (Pattern, Term)
 defVal def =  val_ *> ((,) <$> (pat <* (takes <|> equal)) <*> nonemptyTerm)
           <|> try ((,) <$> (pat <* def) <*> nonemptyTerm)
+          <?> "value definition"
 
-defFun :: Parser def -> Parser Reaction
-defFun def =  fun_ *> reactEq (gives <|> equal)
-          <|> try (reactEq1 def)
+defFun :: Parser def -> Parser (FunDeclare, Reaction)
+defFun def =  (,) <$> funDecl <*> funBody def
+          <?> "function definition"
+
+funBody :: Parser def -> Parser Reaction
+funBody def =  fun_ *> reactEq (gives <|> equal)
+           <|> try (reactEq1 def)
+           <?> "function"
+
+funDecl :: Parser FunDeclare
+funDecl =  try (fun_ *> ((,) <$> optional variable <*> optional ofType) <* semicolon)
+       <|> pure (Nothing, Nothing)
+       <?> "function declaration"
 
 -- Parsing Statements / Commands
 
@@ -128,7 +141,7 @@ statement =  Go <$> (go_ *> term)
          <|> uncurry SetMatch <$> defVal (takes <|> equal)
                               <*> optional (if_ *> reactCaveat)
                               <*> optional (else_ *> reactWhole)
-         <|> LocalFun <$> defFun gives
+         <|> uncurry LocalFun <$> defFun gives
          <|> Run <$> nonemptyTerm
          <?> "statement"
 
@@ -196,7 +209,9 @@ coreOpTable = [ leftward  $ postfixOp dotOp <> infixLOp appOp,
                   <> infixLOp (adhocBinOp ">="),
                 leftward  $ infixLOp (adhocBinOp "==") <> infixLOp (adhocBinOp "/="),
                 rightward $ prefixOp evalOp <> infixROp callOp,
-                rightward $ infixROp pairOp ]
+                rightward $ infixROp pairOp,
+                rightward $ prefixOp prefixTypeCast,
+                leftward $ postfixOp postfixTypeCast ]
 
 dotOp :: Parser (Term -> Term)
 dotOp = try dot >> flip Dot <$> literal
@@ -212,6 +227,12 @@ evalOp = emark >> pure Call
 
 callOp :: Parser (Term -> Term -> Term)
 callOp = emark >> pure (\f a -> f `App` Call a)
+
+postfixTypeCast :: Parser (Term -> Term)
+postfixTypeCast = flip AsType . PostfixType . OfType <$> (colon *> typ)
+
+prefixTypeCast :: Parser (Term -> Term)
+prefixTypeCast = try $ flip AsType . PrefixType . OfType <$> (basicType <* ks "::")
 
 adhocBinOp :: String -> Parser (Term -> Term -> Term)
 adhocBinOp name = do
@@ -346,7 +367,7 @@ reactIf rhs =  reactIf1 rhs
            <|> reactNest (reactIf rhs) rhs
 
 reactLetFun :: Parser Reaction -> Parser Reaction
-reactLetFun rhs =  LetFun <$> defFun gives <*> reactSwitch rhs
+reactLetFun rhs = uncurry LetFun <$> defFun gives <*> reactSwitch rhs
 
 reactElse :: Parser Reaction -> Parser Reaction
 reactElse rhs = Else <$> parameter <*> reactSwitch rhs
@@ -380,8 +401,8 @@ equalsCmd  = rhsCmd  equal
 -- Parsing module declarations
 
 declare :: Parser Declaration
-declare = uncurry Field <$> defVal takes
-       <|> Function <$> defFun (gives <|> equal)
+declare =  uncurry Field <$> defVal takes
+       <|> uncurry Function <$> defFun (gives <|> equal)
 
 bindings :: Parser Bindings
 bindings = declare `endBy` semicolon
@@ -392,78 +413,47 @@ modul = Package <$> bindings <*> term
 -- Parsing Types and Annotations
 
 annote :: Parser Annotation
-annote =  OfPolarity <$> strategy
-      <|> OfType <$> typ
-      <?> "typing annotation"
+annote =  Annote <$> (Check <$> strategy) <*> (toDir <$> optional ofType)
+      <|> Annote Infer <$> (toDir <$> optional basicType)
+      <?> "goto annotation"
 
 strategy :: Parser Strat
 strategy =  (const CBV <$> cbv_)
         <|> (const CBN <$> cbn_)
 
-typ :: Parser Type
-typ = undefined
+ofType :: Parser Type
+ofType =  colon *> typ
+      <?> "type annotation"
 
-{-
-basicType :: Parser Type
-basicType =  TyLit <$> complexLiteral
-         <|> TyVar <$> variable
-         <|> TyBox <$> brackets typ
-         <|> TyObj <$> braces typ
-         <|> parens typ
-         <?> "basic type"
+ofBasicType :: Parser Type
+ofBasicType =  colon *> basicType
+           <?> "basic type annotation"
+
+typ :: Parser Type
+typ =  nonemptyType
+   <|> pure UnitTy
+   <?> "type"
 
 nonemptyType :: Parser Type
 nonemptyType =  parseOpTable coreTyOpTable basicType
             <?> "nonempty type"
 
-typ :: Parser Term
-typ =  nonemptyType
-   <|> pure TyNil
-   <?> "type"
+basicType :: Parser Type
+basicType =  VarTy <$> variable
+--         <|> RecTy <$> (rec_ *> variable <* equal) <*> nonemptyType
+         <|> TagTy <$> brackets (tagType `sepBy` alt)
+         <|> ObjTy <$> braces typ
+         <|> parens typ
+         <?> "basic type"
+
+tagType :: Parser (Literal, Type)
+tagType = (,) <$> literal <*> ofType
 
 coreTyOpTable :: OperationTable Parser Type
-coreTyOpTable = [ leftward $ postfixOp splatTyOp,
-                  leftward  $ postfixOp dotOp <> infixLOp appTyOp,
-                  rightward $ infixROp pairTyOp,
-                  rightward $ infixROp unionTyOp ]
+coreTyOpTable = [ rightward $ infixROp pairTyOp <> infixROp arrowTyOp ]
 
-dotOp :: Parser (Term -> Term)
-dotOp = dot >> pure Dot
+pairTyOp :: Parser (Type -> Type -> Type)
+pairTyOp = comma >> pure PairTy
 
-appOp :: Parser (Term -> Term -> Term)
-appOp = pure App
-
-splatOp :: Parser (Term -> Term)
-splatOp = dotdot >> pure Splat
-
-pairOp :: Parser (Term -> Term -> Term)
-pairOp = comma >> pure Pair
-
-
-fun fst (x, y) = return x;
-fun snd (x, y) = return y;
-
-fun (count n).Head = return n
-  | (count n).Tail = count(n+1);
-
-fun nats = count 0;
-
-fun zips xs ys .Head = return (xs.Head, ys.Head)
-  | zips xs ys .Tail = zips (xs.Head) (ys.Head);
-
-fun maps {f} as
-  | (mapf xs).Head = f (xs.Head)
-  | (mapf xs).Tail = mapf (xs.Tail);
-
-fun go infiniteFilter     p xs to start
-  = go infiniteFilterSwap p xs to start, start;
-
-fun go infiniteFilterSwap {p} as
-  | loop xs _ .Head = xs.Head
-  | go loop xs other .Tail to this
-    if | p(xs.Head) == p(xs.Tail.Head) = go loop (xs.Tail) other to this
-       |                               = go loop (xs.Tail) this  to other;
-
-fun infinitePigeons bits
-  = maps {fst} (infiniteFilter {snd} (zips {nats} bits));
--}
+arrowTyOp :: Parser (Type -> Type -> Type)
+arrowTyOp = ks "->" >> pure ArrowTy

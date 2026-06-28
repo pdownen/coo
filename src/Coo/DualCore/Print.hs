@@ -54,6 +54,12 @@ prettyComplexPat p          = prettyBasicPat p
 prettyBlankPat :: (Pretty i) => Pat i c a -> Doc ann
 prettyBlankPat p = pretty $ bimap (const $ pretty "_") (const $ pretty "_") p
 
+instance Pretty Elide where
+  pretty Elide = pretty "..."
+
+instance (Pretty i) => Pretty (GenericPat i) where
+  pretty (GenPat p) = pretty $ bimap (const Elide) (const Elide) p
+
 instance (Pretty x, Pretty i, Pretty o, Pretty c, Pretty a) => Pretty (Val x i o c a) where
   pretty (Struc p) = pretty p
 
@@ -85,14 +91,33 @@ instance (Pretty x, Pretty i, Pretty o, Pretty c, Pretty a) => Pretty (Bound x i
   pretty (LetVal o v) = hsep [pretty "val", colon, pretty o, takes, pretty v]
   pretty (LetFun o t) = hsep [pretty "fun", colon, pretty o, gives, pretty t]
 
-instance (Pretty x, Pretty i) => Pretty (Type x i) where
-  pretty (TyVar x) = pretty x
-
 instance (Pretty o) => Pretty (Dir o) where
   pretty GoTo      = pretty "⇒"
   pretty ToGo      = pretty "⇐"
-  pretty Infer     = mempty
+  pretty Infer     = pretty "⇒⇐"
   pretty (Check o) = pretty o
 
 instance Pretty Strat where
   pretty = viaShow
+
+instance (Pretty x, Pretty i) => Pretty (Type x i) where
+  pretty = prettyComplexTy
+
+prettyBasicTy t = case t of
+  VarTy x      -> pretty x
+  ObjTy t      -> braces $ pretty t
+  SameTypeAs x -> pretty "typeof" <> parens (pretty x)
+  TagTy xts    -> encloseSep
+    (pretty "[ ") (pretty " ]") (flatAlt (pretty "| ") (pretty " | "))
+    [ prettyTagTy x t | (x, t) <- M.toList xts ]
+  _            -> parens $ prettyComplexTy t
+
+prettyComplexTy t = case t of
+--  RecTy x t  -> pretty "rec" <+> pretty x <+> equals <+> prettyComplexTy t
+  UnitTy     -> mempty
+  PairTy s t -> prettyBasicTy s <> comma <+> prettyComplexTy t
+  _          -> prettyBasicTy t
+
+prettyTagTy x UnitTy = pretty x
+prettyTagTy x t      = pretty x <+> colon <+> prettyComplexTy t
+  

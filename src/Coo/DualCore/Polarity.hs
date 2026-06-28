@@ -27,6 +27,9 @@ instance Eq a => Semigroup (Unified a) where
   Unknown <> y = y
   _ <> _       = Conflict
 
+instance Eq a => Monoid (Unified a) where
+  mempty = Unknown
+
 instance (Pretty a) => Pretty (Unified a) where
   pretty (Same a) = pretty a
   pretty Unknown  = pretty "<unknown>"
@@ -47,6 +50,11 @@ instance (Ord x) => Monoid (PolOutEnv x) where
 
 instance (Pretty x) => Pretty (PolOutEnv x) where
   pretty (PolOut env) = vsep
+    [ pretty x <+> pretty ":" <+> pretty s
+    | (x, s) <- M.toList env ]
+
+instance (Pretty x) => Pretty (PolInEnv x) where
+  pretty (PolIn env) = vsep
     [ pretty x <+> pretty ":" <+> pretty s
     | (x, s) <- M.toList env ]
 
@@ -200,8 +208,8 @@ polarizeVar o x = do
   cxt <- fromCxt <$> ask
   case (o, M.lookup x cxt) of
     (Just s1, Just s2)
-      | s1 == s2  -> return s1
-      | otherwise -> throwError $ MispolarVariable s1 x s2
+      | s1 == s2       -> return s2
+      | otherwise      -> throwError $ MispolarVariable s1 x s2
     (Nothing, Just s)  -> return s
     (Just s,  Nothing) -> do tell $ PolOut $ M.singleton x (Same s)
                              return s

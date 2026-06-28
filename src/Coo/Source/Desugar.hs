@@ -8,6 +8,7 @@ import Coo.Source.Print ()
 import qualified Coo.DualCore.Syntax as DC
 import qualified Coo.DualCore.Sugar as DC
 
+import qualified Data.Map as M
 import qualified Data.Text as Txt
 import Data.Bifunctor
 import Control.Monad.Reader
@@ -15,14 +16,14 @@ import Control.Monad.Except
 
 import Prettyprinter
 
-type CorePole = DC.Dir (Reserve DC.Strat CoreType)
+type CorePole = (DC.Dir DC.Strat, DC.Dir CoreType)
 type CoreId = Reserve DC.Label Variable
 type CoreParam = CoreId
 type CoreSelf = Maybe CoreParam
 type CoreLit = Literal
 type CorePat = DC.Pat CoreLit CoreParam CoreParam
 type CoreCoPat = DC.CoPat CoreLit CoreId CoreId
-type CoreType = DC.Type Variable CoreLit
+type CoreType = DC.Type CoreId CoreLit
 
 type CoreValue = DC.Val CoreId CoreLit CorePole CoreId CoreId
 type CoreStack = CoreValue
@@ -53,7 +54,7 @@ type DesugarMonad m = (MonadError DesugarError m)
 desugarCmd :: (DesugarMonad m)
            => Command -> m CoreCmd
 desugarCmd []      = return DC.GoToJoin
-desugarCmd [Run t] = desugarStmt (Go t Nothing Nothing) []
+-- desugarCmd [Run t] = desugarStmt (Go t Nothing Nothing) []
 desugarCmd (s:c)   = desugarStmt s c
 
 simplifyIdAlias :: CoreCmd -> CoreCmd
@@ -75,25 +76,28 @@ desugarStmt' (Go u a k) _
   | Just k' <- k = DC.Cut <$> desugarTerm u <*> pure (desugarAnn a) <*> desugarTerm k'
 desugarStmt' (Run u) c
   = desugarStmt' (SetMatch (Any (Unbound $ Txt.pack "_")) u Nothing Nothing) c
-desugarStmt' (LocalFun r) c
-  = DC.LocalFun <$> desugarSelfName r <*> desugarReactTm r <*> desugarCmd c
+desugarStmt' (LocalFun d r) c
+  = annotateFun <$> desugarFunName d r <*> pure (funType d) <*> desugarReactTm r <*> desugarCmd c
 desugarStmt' (SetMatch (Any x) t Nothing Nothing) c
   = DC.LocalVal (desugarParam x) <$> desugarTerm t <*> desugarCmd c
 desugarStmt' (SetMatch p t Nothing handle) c
   = do t' <- desugarTerm t
        let r1 = p `Rest` Exec c
        rs' <- desugarReactsTop (r1 `setHandler` handle)
-       return $ DC.NoOther $ DC.Cut t' DC.CheckCBV (DC.Cod rs')
+       return $ DC.Cut t' (DC.Check DC.CBV, DC.GoTo) (DC.Cod rs')
 desugarStmt' (SetMatch p t (Just (q, u)) handle) c
   = do t' <- desugarTerm t
        let r1 = p `Rest` Guard q u (Exec c)
        rs' <- desugarReactsTop (r1 `setHandler` handle)
-       return $ DC.NoOther $ DC.Cut t' DC.CheckCBV (DC.Cod rs')
+       return $ DC.Cut t' (DC.Check DC.CBV, DC.GoTo) (DC.Cod rs')
 desugarStmt' (Case t r) c
   = do t' <- desugarTerm t
        rs' <- desugarReactsTop r
        c' <- desugarCmd c
-       return $ DC.AndThen (DC.SkipOther $ DC.Cut t' DC.CheckCBV (DC.Cod rs')) c'
+       return $
+         DC.AndThen
+         (DC.SkipOther $ DC.Cut t' (DC.Check DC.CBV, DC.GoTo) (DC.Cod rs'))
+         c'
 desugarStmt' (If r) c2
   = do c1 <- desugarGuard r
        let c1' = DC.SkipOther c1
@@ -106,17 +110,18 @@ r `setHandler` Just r' = r `Alt` r'
 
 desugarTerm :: (DesugarMonad m)
             => Term -> m CoreTrm
-desugarTerm (Var x)     = return $ DC.Var $ desugarParam x
-desugarTerm Nil         = return $ DC.Nil
-desugarTerm (Make i v)  = DC.Make i <$> desugarTerm v
-desugarTerm (Pair v w)  = DC.Pair <$> desugarTerm v <*> desugarTerm w
-desugarTerm (Do rs)     = desugarReactTm rs
-desugarTerm (Fn rs)     = desugarTerm (Do rs)
-desugarTerm (Obj u)     = DC.Obj <$> desugarTerm u
-desugarTerm (App u v)   = DC.App <$> desugarTerm u <*> desugarTerm v
-desugarTerm (Dot u i)   = DC.Dot <$> desugarTerm u <*> pure i
-desugarTerm (Call u)    = DC.Call <$> desugarTerm u
-desugarTerm (Shift p t) = explicateShift p <$> desugarTerm t
+desugarTerm (Var x)      = return $ DC.Var $ desugarParam x
+desugarTerm Nil          = return $ DC.Nil
+desugarTerm (Make i v)   = DC.Make i <$> desugarTerm v
+desugarTerm (Pair v w)   = DC.Pair <$> desugarTerm v <*> desugarTerm w
+desugarTerm (Do rs)      = desugarReactTm rs
+desugarTerm (Fn rs)      = desugarTerm (Do rs)
+desugarTerm (Obj u)      = DC.Obj <$> desugarTerm u
+desugarTerm (App u v)    = DC.App <$> desugarTerm u <*> desugarTerm v
+desugarTerm (Dot u i)    = DC.Dot <$> desugarTerm u <*> pure i
+desugarTerm (Call u)     = DC.Call <$> desugarTerm u
+desugarTerm (Shift p t)  = explicateShift p <$> desugarTerm t
+desugarTerm (AsType t c) = DC.AsType <$> desugarTerm t <*> pure (desugarCast c)
 
 explicateShift :: PolarityShift -> CoreTrm -> CoreTrm
 explicateShift (PS CBV You) = DC.Call
@@ -189,31 +194,30 @@ immediateReact r = case r of
 
 irrefutableReact :: Reaction -> Maybe Command
 irrefutableReact r = case r of
-  Exec c     -> Just c
-  Eval t     -> Just [goHere t]
-  LetFun f r -> do
+  Exec c       -> Just c
+  Eval t       -> Just [goHere t]
+  LetFun d f r -> do
     r' <- irrefutableReact r
-    Just $ LocalFun f : r'
-  _          -> Nothing
-  where goHere t = Go t (Just $ OfPolarity CBN) (Just $ Var $ Implicit Here)
+    Just $ LocalFun d f : r'
+  _            -> Nothing
+  where goHere t = Go t (Just $ Annote (Check CBN) ToGo) (Just $ Var $ Implicit Here)
 
 desugarReactCmd :: (DesugarMonad m, MonadReader (CorePat -> CorePat) m)
              => Reaction -> m CoreCmd
 desugarReactCmd (Eval t)             = do
   t' <- desugarTerm t
-  return $ DC.GoHere t' DC.CheckCBN
+  return $ DC.GoHere t' (DC.Check DC.CBN, DC.ToGo)
 desugarReactCmd (Exec c)             = do
   c' <- desugarCmd c
   let t = DC.Act (Internal DC.Context) c'
-  return $ DC.GoHere t DC.CheckCBN
+  return $ DC.GoHere t (DC.Check DC.CBN, DC.ToGo)
 desugarReactCmd (p `Rest` r)         = do
   let p' = desugarPat p
   c' <- desugarGuard r
   return
     $ DC.TryHere
     $ (DC.NonRecCoPat p' DC.:=>)
-    $ DC.LocalAct (Internal DC.Other)
-        (DC.Abort $ DC.Cut (patToDat p') DC.CheckCBV DC.OtherVar)
+    $ DC.LocalElse (patToDat p')
     $ c'
 desugarReactCmd (p `Pop` r)          = do
   let p' = desugarPat p
@@ -249,15 +253,15 @@ desugarReactCmd (Guard (Just p) t r) = do
   let p' = desugarPat p
   c' <- desugarReactCmd r
   return
-    $ DC.Cut t' DC.CheckCBV
+    $ DC.Cut t' (DC.Check DC.CBV, DC.GoTo)
     $ DC.GuardHere
     $ (DC.NonRecCoPat p' DC.:=>)
     $ c'
-desugarReactCmd (LetFun f r)         = do
-  x <- desugarSelfName f
+desugarReactCmd (LetFun d f r)       = do
+  x <- desugarFunName d f
   t <- desugarReactTm f
   c <- desugarReactCmd r
-  return $ DC.LocalFun x t c
+  return $ annotateFun x (funType d) t c
 desugarReactCmd Cede                 = return DC.FallOut
 desugarReactCmd (r1 `Alt` r2)        = do
   c1' <- desugarReactCmd r1
@@ -284,7 +288,7 @@ contextualizeOther cxt        c = DC.LocalOther (patToDat cxt) c
 {-
 renameSelf :: CoreId -> CoreCmd -> CoreCmd
 renameSelf (Internal DC.Self) c = c
-renameSelf name               c = DC.Cut DC.SelfVar DC.CheckCBN (DC.Act name c)
+renameSelf name               c = DC.Cut DC.SelfVar DC.InferCBN (DC.Act name c)
 -}
 
 desugarGuard :: (DesugarMonad m)
@@ -297,12 +301,12 @@ desugarGuard (Guard (Just p) t r) = do
   let p' = desugarPat p
   c' <- desugarGuard r
   let guarded = DC.Guard $ DC.NonRecCoPat p' DC.:=> c'
-  return $ DC.Cut t' DC.CheckCBV guarded
-desugarGuard (LetFun f r)         = do
-  x <- desugarSelfName f
+  return $ DC.Cut t' (DC.Check DC.CBV, DC.GoTo) guarded
+desugarGuard (LetFun d f r)       = do
+  x <- desugarFunName d f
   t <- desugarReactTm f
   c <- desugarGuard r
-  return $ DC.LocalFun x t c
+  return $ annotateFun x (funType d) t c
 desugarGuard Cede                 = return DC.FallThrough
 desugarGuard (r1 `Alt` r2)        = do
   c1 <- desugarGuard r1
@@ -325,17 +329,33 @@ desugarReactTm r
   = DC.Cod <$> runReaderT (desugarReactsTop r) DC.HerePat
 
 
-desugarAnn :: Maybe Annotation -> CorePole
-desugarAnn Nothing               = DC.Infer
-desugarAnn (Just (OfType a))     = DC.Check (External (desugarType a))
-desugarAnn (Just (OfPolarity s)) = DC.Check (Internal (desugarStrat s))
+desugarCast :: TypeCast -> CorePole
+desugarCast (PrefixType a)  = desugarAnn $ Just a
+desugarCast (PostfixType a) = desugarAnn $ Just a
 
-desugarType :: Type -> CoreType
-desugarType (TyVar x) = DC.TyVar x
+desugarAnn :: Maybe Annotation -> CorePole
+desugarAnn (Just (Annote s t)) = (desugarDir $ desugarStrat <$> s,
+                                  desugarDir $ desugarType  <$> t)
+desugarAnn Nothing             = (DC.Infer, DC.Infer)
+
+desugarDir :: Dir o -> DC.Dir o
+desugarDir Infer     = DC.Infer
+desugarDir GoTo      = DC.GoTo
+desugarDir ToGo      = DC.ToGo
+desugarDir (Check x) = DC.Check x
 
 desugarStrat :: Strat -> DC.Strat
 desugarStrat CBV = DC.CBV
 desugarStrat CBN = DC.CBN
+
+desugarType :: Type -> CoreType
+desugarType (VarTy x)       = DC.VarTy $ External x
+-- desugarType (RecTy x t)     = DC.RecTy (External x) $ desugarType t
+desugarType UnitTy          = DC.UnitTy
+desugarType (s `PairTy` t)  = desugarType s `DC.PairTy` desugarType t
+desugarType (s `ArrowTy` t) = desugarType s `DC.PairTy` desugarType t
+desugarType (TagTy xts)     = DC.TagTy $ M.fromList [ (x, desugarType t) | (x, t) <- xts ]
+desugarType (ObjTy t)       = DC.ObjTy $ desugarType t
 
 desugarParam :: Parameter -> CoreParam
 desugarParam (Bound x)    = External x
@@ -355,7 +375,16 @@ desugarLabel Other     = DC.Other
 desugarLabel Context   = DC.Context
 desugarLabel Unmatched = DC.Unmatched
 
+desugarFunName d r
+  | Just x <- extractFunName d r = return $ desugarParam x
+  | otherwise                    = throwError $ UnexpectedSelfless r
+
 desugarSelfName :: MonadError DesugarError m => Reaction -> m CoreParam
 desugarSelfName r
   | Just x <- extractSelfName r = return $ desugarParam x
   | otherwise                   = throwError $ UnexpectedSelfless r
+
+funType (_, t) = desugarType <$> t
+
+annotateFun x Nothing  = DC.LocalFun x
+annotateFun x (Just t) = DC.LocalFunAs x (DC.Check t)

@@ -30,15 +30,15 @@ instance Pretty Literal where
   pretty (Tag x) = pretty x
 
 instance Pretty Statement where
-  pretty (Run t)      = pretty t
-  pretty (Go v a t)   = sep $ catMaybes
+  pretty (Run t)        = pretty t
+  pretty (Go v a t)     = sep $ catMaybes
     [ Just $ pretty "go" <+> pretty v,
       (pretty "as" <+>) <$> fmap pretty a,
       (pretty "to" <+>) <$> fmap pretty t ]
-  pretty (LocalFun r) = pretty "fun" <+> align (prettyReact RecMode r)
-  pretty (If r)       = pretty "if" <+> align (prettyReact GuardMode r)
-  pretty (Case t r)   = align $ vsep [ pretty "match" <+> pretty t <+> pretty "with",
-                                       align (prettyReact WholeMode r) ]
+  pretty (LocalFun d r) = prettyFunDeclare d $ pretty "fun" <+> align (prettyReact RecMode r)
+  pretty (If r)         = pretty "if" <+> align (prettyReact GuardMode r)
+  pretty (Case t r)     = align $ vsep [ pretty "match" <+> pretty t <+> pretty "with",
+                                         align (prettyReact WholeMode r) ]
   pretty (SetMatch p t grd els)
     = align $ vsep $ catMaybes
       [ Just $ pretty "val" <+> prettyComplexPat p <+> pretty "=" <+> pretty t,
@@ -47,6 +47,11 @@ instance Pretty Statement where
 
   -- pretty-printing Command = [Statement]
   prettyList cs = align $ vsep $ fmap pretty cs
+
+prettyFunDeclare :: FunDeclare -> Doc ann -> Doc ann
+prettyFunDeclare (Nothing, Nothing) body = body
+prettyFunDeclare (x,       t)       body = align $ vsep
+  [pretty "fun" <+> pretty x <+> colon <+> pretty t, body]
 
 prettyCaveat :: SetCaveat -> Doc ann
 prettyCaveat (pat, chk) = prettyReact GuardMode $ Guard pat chk Cede
@@ -66,20 +71,22 @@ prettyBasicTerm t0 = case t0 of
 
 prettyNeutralTerm :: Term -> Doc ann
 prettyNeutralTerm t0 = case t0 of
-  t `App` Call u -> prettyNeutralTerm t <+> pretty "!" <+> prettyComplexTerm u
-  t `App`  u     -> prettyNeutralTerm t <+> prettyBasicTerm u
-  t `Dot`  i     -> prettyNeutralTerm t <+> dot <> pretty i
-  t              -> prettyBasicTerm t
+  t `App` Call u           -> prettyNeutralTerm t <+> pretty "!" <+> prettyComplexTerm u
+  t `App`  u               -> prettyNeutralTerm t <+> prettyBasicTerm u
+  t `Dot`  i               -> prettyNeutralTerm t <+> dot <> pretty i
+  t `AsType` PostfixType a -> prettyNeutralTerm t <+> colon <+> pretty a
+  t                        -> prettyBasicTerm t
 
 prettyComplexTerm :: Term -> Doc ann
 prettyComplexTerm t0 = case t0 of
-  Nil            -> mempty
-  t `Pair` u     -> prettyNeutralTerm t <> comma <+> prettyComplexTerm u
-  Do r       -> pretty "do" <+> prettyReact WholeMode r
-  Fn r       -> pretty "fn" <+> prettyReact LamMode r
-  Call t     -> pretty "!" <+> prettyNeutralTerm t
-  Shift ps t -> pretty ps <+> prettyNeutralTerm t
-  t          -> prettyNeutralTerm t
+  Nil                     -> mempty
+  t `Pair` u              -> prettyNeutralTerm t <> comma <+> prettyComplexTerm u
+  Do r                    -> pretty "do" <+> prettyReact WholeMode r
+  Fn r                    -> pretty "fn" <+> prettyReact LamMode r
+  Call t                  -> pretty "!" <+> prettyNeutralTerm t
+  Shift ps t              -> pretty ps <+> prettyNeutralTerm t
+  AsType t (PrefixType a) -> pretty a <> pretty "::" <> prettyNeutralTerm t
+  t                       -> prettyNeutralTerm t
 
 instance Pretty Reaction where
   pretty = prettyReact UnknownMode
@@ -124,8 +131,8 @@ prettyReact GuardMode (Guard (Just p) t r)
 prettyReact _         r@(Guard _ _ _)
   = pretty "if" <+> prettyReact GuardMode r
 
-prettyReact _ (LetFun f r)
-  = align $ vsep [ pretty "fun" <+> prettyReact RecMode f,
+prettyReact _ (LetFun d f r)
+  = align $ vsep [ prettyFunDeclare d $ pretty "fun" <+> prettyReact RecMode f,
                    prettyReact UnknownMode r ]
 
 prettyReact _ (Else p r)
@@ -153,8 +160,8 @@ instance Pretty CoPattern where
   pretty (q `CoDot` i) = pretty q <+> dot <> pretty i
 
 instance Pretty Declaration where
-  pretty (Field p t)  = pretty "val" <+> pretty p <+> takes <+> pretty t
-  pretty (Function r) = pretty "fun" <+> prettyReact RecMode r
+  pretty (Field p t)    = pretty "val" <+> pretty p <+> takes <+> pretty t
+  pretty (Function d r) = prettyFunDeclare d $ pretty "fun" <+> prettyReact RecMode r
 
   -- pretty-printing Bindings = [Declaration]
   prettyList ds = vsep [ pretty d <> semi | d <- ds ]
@@ -163,8 +170,17 @@ instance Pretty Module where
   pretty (Package ds t) = prettyList ds <> line <> pretty t
 
 instance Pretty Annotation where
-  pretty (OfType t)     = pretty t
-  pretty (OfPolarity p) = pretty p
+  pretty (Annote (Check p) (Check t)) = pretty p <+> colon <+> pretty t
+  pretty (Annote Infer     (Check t)) = pretty t
+  pretty (Annote (Check p) Infer)     = pretty p
+  pretty (Annote Infer     Infer)     = mempty
+  pretty (Annote p         t)         = pretty p <+> colon <+> pretty t
+
+instance (Pretty a) => Pretty (Dir a) where
+  pretty GoTo      = pretty "⇒"
+  pretty ToGo      = pretty "⇐"
+  pretty Infer     = pretty ""
+  pretty (Check a) = pretty a
 
 instance Pretty Strat where
   pretty = viaShow
@@ -179,4 +195,23 @@ instance Pretty PolarityShift where
   pretty (PS CBV You) = pretty "⇓"
 
 instance Pretty Type where
-  pretty (TyVar x) = pretty x
+  pretty = prettyComplexTy
+
+prettyBasicTy t = case t of
+  VarTy x   -> pretty x
+  ObjTy t   -> braces $ pretty t
+  TagTy xts -> encloseSep
+    (pretty "[ ") (pretty " ]") (flatAlt (pretty "| ") (pretty " | "))
+    [ prettyTagTy x t | (x, t) <- xts ]
+  _         -> parens $ prettyComplexTy t
+
+prettyComplexTy t = case t of
+--  RecTy x t   -> pretty "rec" <+> pretty x <+> equals <+> prettyComplexTy t
+  UnitTy      -> mempty
+  PairTy s t  -> prettyBasicTy s <> comma <+> prettyComplexTy t
+  ArrowTy s t -> prettyBasicTy s <+> pretty "->" <+> prettyComplexTy t
+  _           -> prettyBasicTy t
+
+prettyTagTy x UnitTy = pretty x
+prettyTagTy x t      = pretty x <+> colon <+> prettyComplexTy t
+  

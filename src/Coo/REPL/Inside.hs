@@ -15,6 +15,7 @@ import qualified Coo.Grammar.Lexer as G
 import qualified Coo.Source.Syntax as S
 import qualified Coo.Source.Parse as S
 import qualified Coo.Source.Polarity as S
+import qualified Coo.Source.TypeCheck as S
 import qualified Coo.Source.Simplify as S
 import qualified Coo.Source.Desugar as S
 import Coo.Source.Print ()
@@ -22,7 +23,8 @@ import Coo.Source.Print ()
 import Coo.DualCore.Syntax as DC
 import Coo.DualCore.Sugar as DC
 import Coo.DualCore.Focus as DC
-import Coo.DualCore.Polarity as DC
+import Coo.DualCore.Polarity as DC hiding (UnboundConstraints)
+import Coo.DualCore.TypeCheck as DC
 import Coo.DualCore.Run as DC
 import Coo.DualCore.Print
 
@@ -48,6 +50,9 @@ import Control.Monad.Catch
 import System.Exit
 import System.Console.Haskeline
 import System.Console.Haskeline.History
+
+type UntypedCmd = DC.Cmd ExecId S.Literal (DC.UnelabPole ExecId S.Literal)
+type TypedCmd = DC.Cmd ExecId S.Literal (DC.ElabPole ExecId S.Literal)
 
 type ExecId = S.CoreId
 
@@ -83,7 +88,7 @@ instance Pretty PatDesc where
   pretty (CustomPat desc) = pretty "_:" <> pretty desc
 
 data PrimOp x i o a m
-  = POp { opName :: String,
+  = POp { opName  :: Txt.Text,
           applyOp :: Strat -> Val x i o (PrimOp x i o a m) a
                   -> m (Cmd x i o) }
 
@@ -91,7 +96,7 @@ instance Eq (PrimOp x i o a m) where
   f == g = opName f == opName g
 
 instance Show (PrimOp x i o a m) where
-  show op = "<#" ++ opName op ++ "#>"
+  show op = "<#" ++ Txt.unpack (opName op) ++ "#>"
 
 instance Pretty (PrimOp x i o a m) where
   pretty = viaShow
@@ -104,15 +109,20 @@ type Glob m = DC.Global ExecId S.Literal DC.Strat (POp m) Void (ReplT m)
 
 type GlobIO = Glob PromptIO
 
-data ReplState = RS { lineno :: Int,
-                      polarSource  :: S.PolInEnv,
-                      checkpoint :: GlobIO }
+data ReplState = RS { lineno      :: Int,
+                      polarSource :: S.PolInEnv,
+                      typeSource  :: S.TyInEnv,
+                      typeCore    :: DC.TyInEnv ExecId S.Literal,
+                      checkpoint  :: GlobIO,
+                      typeOption  :: TypeCheckingOption }
 
 data ReplError
   = ParseErr (ParseErrorBundle String Void)
   | SourcePolarityErr S.PolarityError
+  | SourceTypeErr S.TypeError
   | DesugarErr S.DesugarError
-  | DualPolarityErr (DC.PolarityError S.CoreId S.Literal)
+  | DualPolarityErr (DC.PolarityError ExecId S.Literal)
+  | DualTypeErr (DC.TypeError ExecId S.Literal)
   | RuntimeErr ExecError
   deriving (Show)
 
@@ -134,8 +144,14 @@ instance Pretty ReplError where
   pretty (SourcePolarityErr err) = hsep
     [ pretty "Polarity Error:",
       pretty err ]
+  pretty (SourceTypeErr err) = hsep
+    [ pretty "Type Error:",
+      pretty err ]
   pretty (DualPolarityErr err) = hsep
     [ pretty "Polarity Error (internal):",
+      pretty err ]
+  pretty (DualTypeErr err) = hsep
+    [ pretty "Type Error (internal):",
       pretty err ]
   pretty (DesugarErr err) = hsep
     [ pretty "Desugaring Error:",
@@ -239,52 +255,31 @@ overInput f (ReplT m) = ReplT $
   ReaderT $ \chk ->
   f (runReaderT (runStateT (runStateT (runExceptT m) env) rs) chk)
 
+
+makeSourceTyEnv table = M.fromList table
+
+bindLocalOp pop = (External $ opName pop,
+                   LetFun CBN $ Free pop)
+
+makeLocalEnv table = M.fromList [ bindLocalOp pop | (pop, _) <- table ]
+
 initEnv :: Env ExecId S.Literal DC.Strat OpIO Void
-initEnv = M.fromList
-  [ (External $ Txt.pack "==", LetFun CBN $ Free equalityOp),
-    (External $ Txt.pack "/=", LetFun CBN $ Free notEqualityOp),
-    (External $ Txt.pack "<", LetFun CBN $ Free lessThanOp),
-    (External $ Txt.pack ">", LetFun CBN $ Free greaterThanOp),
-    (External $ Txt.pack "=<", LetFun CBN $ Free lessEqualOp),
-    (External $ Txt.pack ">=", LetFun CBN $ Free greaterEqualOp),
-    (External $ Txt.pack "+", LetFun CBN $ Free plusOp),
-    (External $ Txt.pack "-", LetFun CBN $ Free minusOp),
-    (External $ Txt.pack "*", LetFun CBN $ Free timesOp),
-    (External $ Txt.pack "/", LetFun CBN $ Free divideOp),
-    (External $ Txt.pack "%", LetFun CBN $ Free moduloOp),
-    (External $ Txt.pack "^", LetFun CBN $ Free exponentOp),
-    (External $ Txt.pack "round", LetFun CBN $ Free roundOp),
-    (External $ Txt.pack "ceiling", LetFun CBN $ Free ceilingOp),
-    (External $ Txt.pack "floor", LetFun CBN $ Free floorOp),
-    (External $ Txt.pack "print", LetFun CBN $ Free printOp),
-    (External $ Txt.pack "pprint", LetFun CBN $ Free pprintOp),
-    (External $ Txt.pack "run_file", LetFun CBN $ Free runFileOp)]
+initEnv = makeLocalEnv primOpTable
+
+bindPolarityOp pop = (S.Bound $ opName pop, S.CBN)
+
+makePolarityEnv table = S.PolIn $ M.fromList [ bindPolarityOp pop | (pop, _) <- table ]
 
 initPolarity :: S.PolInEnv
-initPolarity = S.PolIn $ M.fromList
-  [ (S.Bound $ Txt.pack "==", S.CBN),
-    (S.Bound $ Txt.pack "/=", S.CBN),
-    (S.Bound $ Txt.pack "<", S.CBN),
-    (S.Bound $ Txt.pack ">", S.CBN),
-    (S.Bound $ Txt.pack "=<", S.CBN),
-    (S.Bound $ Txt.pack ">=", S.CBN),
-    (S.Bound $ Txt.pack "+", S.CBN),
-    (S.Bound $ Txt.pack "-", S.CBN),
-    (S.Bound $ Txt.pack "*", S.CBN),
-    (S.Bound $ Txt.pack "/", S.CBN),
-    (S.Bound $ Txt.pack "%", S.CBN),
-    (S.Bound $ Txt.pack "^", S.CBN),
-    (S.Bound $ Txt.pack "round", S.CBN),
-    (S.Bound $ Txt.pack "ceiling", S.CBN),
-    (S.Bound $ Txt.pack "floor", S.CBN),
-    (S.Bound $ Txt.pack "print", S.CBN),
-    (S.Bound $ Txt.pack "pprint", S.CBN),
-    (S.Bound $ Txt.pack "run_file", S.CBN)]
+initPolarity = makePolarityEnv primOpTable
+
+makeInitGlob :: [(OpIO, S.Type)] -> GlobIO
+makeInitGlob primOps = DC.Global { DC.extern = replHandlers,
+                                   DC.locals = makeLocalEnv primOps,
+                                   DC.focusing = initFocus }
 
 initGlob :: GlobIO
-initGlob = DC.Global { DC.extern = replHandlers,
-                       DC.locals = initEnv,
-                       DC.focusing = initFocus }
+initGlob = makeInitGlob primOpTable
 
 initFocus :: FocusSettings Strat ExecId Int
 initFocus = DC.FocAs { DC.fociNote = DC.stratFoci CBV,
@@ -292,8 +287,38 @@ initFocus = DC.FocAs { DC.fociNote = DC.stratFoci CBV,
                        DC.nameTemp = Internal . DC.Temp,
                        DC.nameHere = Internal DC.It }
 
+makePrimTypeCxt :: [S.PrimType] -> M.Map S.Variable S.PrimType
+makePrimTypeCxt table = M.fromList [ (primTyName t, t) | t <- table ]
+
+makeLocalTypeCxt :: [(OpIO, S.Type)] -> M.Map S.Parameter S.ElabPole
+makeLocalTypeCxt table = M.fromList
+  [ (S.Bound $ opName x, S.CBN S.::: t)
+  | (x, t) <- table ]
+
+makeSourceTyInEnv :: [S.PrimType] -> [(OpIO, S.Type)] -> S.TyInEnv
+makeSourceTyInEnv primTys primOps =
+  S.TyIn (makePrimTypeCxt primTys) (makeLocalTypeCxt primOps)
+
+desugarTyInEnv :: S.TyInEnv -> DC.TyInEnv S.CoreId S.Literal
+desugarTyInEnv (S.TyIn ptys vars) = DC.TyIn ptys' vars'
+  where ptys' = M.fromList [ (External x, pty)
+                           | (x, pty) <- M.toList ptys ]
+        vars' = M.fromList [ (S.desugarParam x,
+                              S.desugarStrat s DC.::: S.desugarType t)
+                           | (x, s S.::: t) <- M.toList vars ]
+
+makeInitRS :: [S.PrimType] -> [(OpIO, S.Type)] -> ReplState
+makeInitRS primTys primOps =
+  RS { lineno = 0,
+       polarSource = makePolarityEnv primOps,
+       typeSource = tyInEnv,
+       typeCore   = desugarTyInEnv tyInEnv,
+       checkpoint = makeInitGlob primOps,
+       typeOption = IgnoreTypes }
+  where tyInEnv = makeSourceTyInEnv primTys primOps
+
 initRS :: ReplState
-initRS = RS { lineno = 0, polarSource = initPolarity, checkpoint = initGlob }
+initRS = makeInitRS primTyTable primOpTable
 
 initCmd :: ExecCmd
 initCmd = DC.Cut DC.NilVal DC.CBV (DC.Var (Internal DC.Join))
@@ -342,7 +367,7 @@ printStep m = do
   
 
 replNextPOp :: ReplState -> OpIO
-replNextPOp rs = POp { opName = "repl#" ++ show (lineno rs),
+replNextPOp rs = POp { opName = Txt.pack $ "repl#" ++ show (lineno rs),
                        applyOp = \_ -> replNext rs }
 
 replNext :: ReplState -> ExecVal -> ReplIO ExecCmd
@@ -353,7 +378,7 @@ replNext rs v = do
 
 printVal :: ExecVal -> ReplIO ()
 printVal (Struc MT) = return ()
-printVal v          = liftIO $ putDoc $ prettyShortVal v <> hardline
+printVal v          = liftIO $ putDoc $ pretty "=" <+> prettyShortVal v <> hardline
 
 nextCommand :: ReplState -> ReplIO ExecCmd
 nextCommand rs = do
@@ -367,7 +392,11 @@ nextCommand rs = do
   -- liftIO $ putStrLn "--- Polarized source code ---"
   -- liftIO $ putDoc $ pretty sp <> hardline
   -- liftIO $ putStrLn "-----------------------------"
-  let smp = S.simplifyReactsCmd sp
+  st <- typeCheckSource (typeOption rs) sp
+  -- liftIO $ putStrLn "--- Typed source code ---"
+  -- liftIO $ putDoc $ pretty st <> hardline
+  -- liftIO $ putStrLn "-------------------------"
+  smp <- replSimplify st
   -- liftIO $ putStrLn "--- Simplified source code ---"
   -- liftIO $ putDoc $ pretty smp <> hardline
   -- liftIO $ putStrLn "------------------------------"
@@ -375,7 +404,11 @@ nextCommand rs = do
   -- liftIO $ putStrLn "--- Desugared Dual Core command ---"
   -- liftIO $ putDoc $ pretty dc <> hardline
   -- liftIO $ putStrLn "-----------------------------------"
-  ec <- prepExec dc
+  dt <- typeCheckCore (typeOption rs) dc
+  -- liftIO $ putStrLn "--- Typed Dual Core command ---"
+  -- liftIO $ putDoc $ pretty (preCheckCore dt) <> hardline
+  -- liftIO $ putStrLn "-------------------------------"
+  ec <- prepExec dt
   -- liftIO $ putStrLn "--- Executable Dual Core command ---"
   -- liftIO $ putDoc $ pretty ec <> hardline
   -- liftIO $ putStrLn "------------------------------------"
@@ -399,8 +432,13 @@ gatherInput ln = liftIO $ do
 data ReplAside = BeginMultiLine
                | EndMultiLine
                | ExecuteFile String
+               | CheckTypeOfExpr String
+               | SetTypeChecker TypeCheckingOption
                | ReplHelp
   deriving (Show, Eq)
+
+data TypeCheckingOption = IgnoreTypes | TypeWarnings | TypeErrors
+  deriving (Show, Eq, Ord, Enum, Bounded)
 
 gatherInput :: Int -> ReplIO String
 gatherInput ln = gatherMultiLineInput ln Nothing
@@ -414,31 +452,83 @@ gatherMultiLineInput ln more = do
   case line of
     Nothing  -> liftIO exitSuccess
     Just txt -> do
-      case (more, parse (G.whole replAside) ("repl line " ++ show ln) txt) of
+      case (more, parse (G.perfect replAside) ("repl line " ++ show ln) txt) of
         (Nothing,   Left _) -> return txt
         (Just prev, Left _) -> gatherMultiLineInput ln (Just $ txt:prev)
         (Just prev, Right EndMultiLine) -> return $ unlines $ reverse prev
         (Nothing,   Right EndMultiLine) -> do
-          liftIO $ putStrLn "not currently reading a multi-line statement"
+          liftIO $ putStrLn "# not currently reading a multi-line statement"
           gatherMultiLineInput ln more
         (Nothing, Right BeginMultiLine) -> gatherMultiLineInput ln (Just [])
         (Just _,  Right BeginMultiLine) -> do
-          liftIO $ putStrLn "already reading a multi-line statement"
+          liftIO $ putStrLn "# already reading a multi-line statement"
           gatherMultiLineInput ln more
         (Nothing, Right (ExecuteFile path)) -> liftIO $ readFile path
         (Just _,  Right (ExecuteFile _))    -> do
-          liftIO $ putStrLn "cannot execute a file in the middle of multi-line input"
+          liftIO $ putStrLn "# cannot execute a file in the middle of multi-line input"
+          gatherMultiLineInput ln more
+        (_, Right (CheckTypeOfExpr str)) -> do
+          checkTypeOfExpr str
+          gatherMultiLineInput ln more
+        (Nothing, Right (SetTypeChecker opt)) -> do
+          liftReplState $ modify $ \rs -> rs{typeOption = opt}
+          let msg = case opt of
+                      IgnoreTypes -> "# now ignoring static types"
+                      TypeWarnings -> "# now warning about static type errors"
+                      TypeErrors -> "# now enforcing static types"
+          liftIO $ putStrLn msg
+          return ""
+        (Just _, Right (SetTypeChecker _)) -> do
+          liftIO $ putStrLn "# cannot change typing mode in the middle of multi-line input"
           gatherMultiLineInput ln more
         (_, Right ReplHelp) -> do
           liftIO $ putStr helpMessage
           gatherMultiLineInput ln more
 
 replAside :: G.Parser ReplAside
-replAside =  G.str "#{" *> pure BeginMultiLine
-         <|> G.str "#}" *> pure EndMultiLine
-         <|> G.str "#run" *> (ExecuteFile <$> G.inlineQuote)
-         <|> G.str "#help" *> pure ReplHelp
-         <?> "repl side instruction"
+replAside =  G.exact "#" *> replSideInstruction
+         <?> "repl aside"
+
+replSideInstruction :: G.Parser ReplAside
+replSideInstruction =  G.exact "{" *> pure BeginMultiLine
+                   <|> G.exact "}" *> pure EndMultiLine
+                   <|> G.exact "run" *> (ExecuteFile <$> G.inlineQuote)
+                   <|> G.exact "help" *> pure ReplHelp
+                   <|> G.exact "check" *> (SetTypeChecker <$> typeCheckingOption)
+                   <|> G.exact "type" *> (CheckTypeOfExpr <$> G.anything)
+                   <?> "repl side instruction (try asking for #!help)"
+
+typeCheckingOption :: G.Parser TypeCheckingOption
+typeCheckingOption =  G.exact "ignore" *> pure IgnoreTypes
+                  <|> G.exact "warn" *> pure TypeWarnings
+                  <|> G.exact "error" *> pure TypeErrors
+
+checkTypeOfExpr :: String -> ReplIO (Maybe S.ElabPole)
+checkTypeOfExpr input = do
+  case parse (G.whole S.term) "type checking" input of
+    Left err -> do
+      liftIO $ putDoc $ pretty (ParseErr err) <> hardline
+      return Nothing
+    Right t -> do
+      rs <- liftReplState get
+      case S.runTypeCheck (S.inferTypeTerm t) (typeSource rs) of
+        (Left err, env) -> do
+          liftIO $ putDoc $ pretty (SourceTypeErr err) <> hardline
+          liftIO $ putStrLn "----------------------------------------"
+          printConstraints env
+          return Nothing
+        (Right (t', a), env) -> do
+          liftIO $ putDoc $ vsep [ pretty t',
+                                   colon <+> pretty a,
+                                   mempty ]
+          printConstraints env
+          return $ Just a
+  where printConstraints (S.TyOut env)
+          | M.null env = return ()
+          | otherwise  = do
+              liftIO $ putDoc $ vsep [ pretty "Constraints:",
+                                       indent 4 (pretty $ S.TyOut env),
+                                       mempty ]
 
 replParse :: Int -> String -> ReplIO S.Command
 replParse ln input = do
@@ -453,13 +543,79 @@ replPolar sc = do
     (Left err, _) -> throwError $ SourcePolarityErr err
     (Right sp, _) -> do
       let env' = S.cmdPolarityEnv sc
-      liftReplState $ modify $ \st -> st{polarSource = env' <> env}
+      liftReplState $ modify $ \rs -> rs{polarSource = env' <> env}
       return sp
+
+typeCheckSource :: TypeCheckingOption -> S.Command -> ReplIO S.Command
+typeCheckSource IgnoreTypes c = return c
+typeCheckSource opt c = do
+  rs <- liftReplState get
+  case S.runTypeCheck (S.semiclosedTypeCheck $ S.elaborateStms c) (typeSource rs) of
+    (Right (c', env'), _) -> do
+      liftReplState $ modify $ \rs' ->
+        rs'{ typeSource = env' <> typeSource rs',
+             typeCore = desugarTyInEnv env' <> typeCore rs' }
+      return c'
+    (Left err, _) -> do
+      let tyerr = SourceTypeErr err
+      case opt of
+        TypeWarnings -> do liftIO $ putDoc $ pretty tyerr <> hardline
+                           liftIO $ putStrLn "----------------------------------------"
+                           return c
+        TypeErrors   -> throwError tyerr
+
+replSimplify :: S.Command -> ReplIO S.Command
+replSimplify cmd = do
+  RS{typeOption = opt} <- liftReplState get
+  case opt of
+    IgnoreTypes -> return $ S.simplifyReactsCmd cmd
+    _           -> return cmd
+
+isJoinConstraint env = M.keys env == [joinId]
+
+typeCheckCore :: TypeCheckingOption
+              -> S.CoreCmd
+              -> ReplIO S.CoreCmd
+typeCheckCore IgnoreTypes c = return c
+typeCheckCore opt c = do
+  env <- typeCore <$> liftReplState get
+  case DC.runTypeCheck (DC.elaborateCmd $ preCheckCore c) env of
+    (Right c', TyOut env)
+      | M.null env          -> return $ postCheckCore c'
+      | isJoinConstraint env, Just (_ ::? Typed t) <- M.lookup joinId env -> do
+          case t of
+            UnitTy -> return ()
+            _      -> liftIO $ putDoc $ pretty ":" <+> pretty t <> hardline
+          return $ postCheckCore c'
+      | otherwise           -> handleTypeErr $ DualTypeErr $ UnboundConstraints $ TyOut env
+    (Left err, _)           -> handleTypeErr $ DualTypeErr err
+  where handleTypeErr err = case opt of
+          TypeWarnings -> do liftIO $ putDoc $ pretty err <> hardline
+                             liftIO $ putStrLn "----------------------------------------"
+                             return c
+          TypeErrors   -> throwError err
+
+preCheckCore :: S.CoreCmd -> UntypedCmd
+preCheckCore = fmap merge
+  where merge (Check s, Check a) = Check (s ::: a)
+        merge (GoTo, _) = GoTo
+        merge (_, GoTo) = GoTo
+        merge (ToGo, _) = ToGo
+        merge (_, ToGo) = ToGo
+        merge _         = Infer
+
+postCheckCore :: TypedCmd -> S.CoreCmd
+postCheckCore = fmap split
+  where split (s ::: a) = (Check s, Check a)
+
+continueCmd :: S.Command -> S.Command
+continueCmd = S.endRunGoesTo (Just inferCBVFromTerm) (Just nextCont)
+  where inferCBVFromTerm = S.Annote (S.Check S.CBV) S.GoTo
+        nextCont = S.Var $ S.Implicit S.Join
 
 replTrans :: S.Command -> ReplIO S.CoreCmd
 replTrans cmd = do
-  let cmd' = S.endRunGoesTo (S.Var $ S.Implicit S.Join) cmd
-  lowered <- runExceptT $ S.desugarCmd cmd'
+  lowered <- runExceptT $ S.desugarCmd $ continueCmd cmd
   case lowered of
     Left err -> throwError $ DesugarErr err
     Right dc -> return dc
@@ -477,6 +633,9 @@ replTrans stm = do
     Right dc -> return dc
 -}
 
+-- checkDualCore :: S.CoreCmd -> ReplIO ()
+-- checkDualCore cmd = do
+
 prepExec :: S.CoreCmd -> ReplIO ExecCmd
 prepExec c = do
   env <- locals <$> get
@@ -487,11 +646,7 @@ prepExec c = do
     (Right ex, _) -> return ex
 
 eraseTypePole :: S.CorePole -> DC.Dir DC.Strat
-eraseTypePole (DC.Check (Internal s)) = DC.Check s
-eraseTypePole (DC.Check (External _)) = DC.Infer
-eraseTypePole DC.Infer                = DC.Infer
-eraseTypePole DC.GoTo                 = DC.GoTo
-eraseTypePole DC.ToGo                 = DC.ToGo
+eraseTypePole = fst
 
 boundPolarity :: Bound x i o c a -> Strat
 boundPolarity (LetVal _ _) = CBV
@@ -570,15 +725,73 @@ replHandlers = Extern
 
 
 
-----------------------
--- Specific PrimOps --
-----------------------
+-------------------------
+-- Specific Primitives --
+-------------------------
+
+primTyTable :: [S.PrimType]
+primTyTable = [ intPrimTy, floatPrimTy, stringPrimTy ]
+
+intPrimTy :: S.PrimType
+intPrimTy = PrimTy { primTyName   = S.IntTyName,
+                     checkPrimPat = anyInt }
+  where anyInt (S.Int n :@: MT)  = Just (S.Int n :@: MT)
+        anyInt (S.Int n :@: A p) = Just (S.Int n :@: A (UnitTy, p))
+        anyInt _                 = Nothing
+
+floatPrimTy :: S.PrimType
+floatPrimTy = PrimTy { primTyName   = S.FloatTyName,
+                       checkPrimPat = anyFlt }
+  where anyFlt (S.Flt x :@: MT)  = Just (S.Flt x :@: MT)
+        anyFlt (S.Flt x :@: A p) = Just (S.Flt x :@: A (UnitTy, p))
+        anyFlt (S.Int n :@: MT)  = Just (S.Flt (fromInteger n) :@: MT)
+        anyFlt (S.Int n :@: A p) = Just (S.Flt (fromInteger n) :@: A (UnitTy, p))
+        anyFlt _                 = Nothing
+
+stringPrimTy :: S.PrimType
+stringPrimTy = PrimTy { primTyName   = S.StringTyName,
+                        checkPrimPat = anyStr }
+  where anyStr (S.Str s :@: MT)  = Just (S.Str s :@: MT)
+        anyStr (S.Str s :@: A p) = Just (S.Str s :@: A (UnitTy, p))
+        anyStr _                 = Nothing
+
+
+primOpTable :: [(OpIO, S.Type)]
+primOpTable = [ (equalityOp,     binaryIntCompareTy),
+                (notEqualityOp,  binaryIntCompareTy),
+                (lessThanOp,     binaryIntCompareTy),
+                (greaterThanOp,  binaryIntCompareTy),
+                (lessEqualOp,    binaryIntCompareTy),
+                (greaterEqualOp, binaryIntCompareTy),
+                
+                (plusOp,     binaryIntOpTy),
+                (minusOp,    binaryIntOpTy),
+                (timesOp,    binaryIntOpTy),
+                (divideOp,   binaryIntOpTy),
+                (moduloOp,   binaryIntOpTy),
+                (exponentOp, binaryIntOpTy),
+
+                (roundOp,   S.FloatTy `S.ArrowTy` S.ObjTy S.IntTy),
+                (ceilingOp, S.FloatTy `S.ArrowTy` S.ObjTy S.IntTy),
+                (floorOp,   S.FloatTy `S.ArrowTy` S.ObjTy S.IntTy),
+
+                (printOp,  S.StringTy `S.ArrowTy` S.ObjTy S.UnitTy),
+                (pprintOp, S.IntTy `S.ArrowTy` S.ObjTy S.UnitTy),
+
+                (runFileOp, S.StringTy `S.ArrowTy` S.ObjTy S.UnitTy) ]
+
+binaryFunTy a b c = a `S.ArrowTy` (b `S.ArrowTy` S.ObjTy c)
+binaryIntOpTy = binaryFunTy S.IntTy S.IntTy S.IntTy
+binaryFltOpTy = binaryFunTy S.FloatTy S.FloatTy S.FloatTy
+binaryStrOpTy = binaryFunTy S.StringTy S.StringTy S.StringTy
+binaryIntCompareTy = binaryFunTy S.IntTy S.IntTy S.BoolTy
+
 
 unaryNumOp :: String
            -> (Integer -> ExecVal)
            -> (Double -> ExecVal)
            -> OpIO
-unaryNumOp name i f = POp { opName = name, applyOp = unaryNumFun name i f }
+unaryNumOp name i f = POp { opName = Txt.pack name, applyOp = unaryNumFun name i f }
 
 unaryNumFun :: String
             -> (Integer -> ExecVal)
@@ -594,7 +807,7 @@ binaryNumOp2 :: String
              -> (Integer -> Integer -> ExecVal)
              -> (Double -> Double -> ExecVal)
              -> OpIO
-binaryNumOp2 name i f = POp { opName = name, applyOp = binaryNumFun2 name i f }
+binaryNumOp2 name i f = POp { opName = Txt.pack name, applyOp = binaryNumFun2 name i f }
 
 binaryNumFun2 :: String
               -> (Integer -> Integer -> ExecVal)
@@ -610,7 +823,7 @@ binaryNumOp :: String
             -> (Double -> Double -> ExecVal)
             -> OpIO
 binaryNumOp name i_i f_i i_f f_f =
-  POp { opName = name, applyOp = binaryNumFun name i_i f_i i_f f_f }
+  POp { opName = Txt.pack name, applyOp = binaryNumFun name i_i f_i i_f f_f }
 
 binaryNumFun :: String
              -> (Integer -> Integer -> ExecVal)
@@ -652,7 +865,7 @@ onBinaryBool f x y = if f x y
 
 equalityOp :: OpIO
 equalityOp = POp {
-  opName = "==",
+  opName = Txt.pack "==",
   applyOp = \o v@(Struc p) -> case p of
       x :*: (y :*: C k)
         -> sendToCls o (onBinaryBool (==) x y) k
@@ -661,7 +874,7 @@ equalityOp = POp {
 
 notEqualityOp :: OpIO
 notEqualityOp = POp {
-  opName = "/=",
+  opName = Txt.pack "/=",
   applyOp = \o v@(Struc p) -> case p of
       x :*: (y :*: C k)
         -> sendToCls o (onBinaryBool (/=) x y) k
@@ -690,7 +903,7 @@ timesOp :: OpIO
 timesOp = binaryNumOp2 "*" (onBinaryLit S.Int (*)) (onBinaryLit S.Flt (*))
 
 divideOp :: OpIO
-divideOp = POp { opName = "/", applyOp = divideFun }
+divideOp = POp { opName = Txt.pack "/", applyOp = divideFun }
 
 divideFun o v@(Struc p) = case p of
   (S.Int x :@: MT) :*: ((S.Int y :@: MT) :*: C k)
@@ -730,7 +943,7 @@ floorOp = unaryNumOp "floor" (onUnaryLit S.Int id) (onUnaryLit S.Int floor)
 
 printOp :: OpIO
 printOp = POp {
-  opName = "print",
+  opName = Txt.pack "print",
   applyOp = \o v@(Struc p) -> case p of
       (S.Str s :@: MT) :*: C k
         -> do liftIO $ putStrLn $ Txt.unpack s
@@ -740,7 +953,7 @@ printOp = POp {
 
 pprintOp :: OpIO
 pprintOp = POp {
-  opName = "pprint",
+  opName = Txt.pack "pprint",
   applyOp = \o v@(Struc p) -> case p of
       (p :*: C k)
         -> do liftIO $ putDoc $ prettyShortVal (Struc p) <> hardline
@@ -750,7 +963,7 @@ pprintOp = POp {
 
 runFileOp :: OpIO
 runFileOp = POp {
-  opName = "run_file",
+  opName = Txt.pack "run_file",
   applyOp = \_ v@(Struc p) -> case p of
       (S.Str s :@: MT) :*: C k
         -> do let path = Txt.unpack s
@@ -772,7 +985,12 @@ loadFileForExecution path = do
   -- liftIO $ putStrLn "--- Polarized source code ---"
   -- liftIO $ putDoc $ pretty sp <> hardline
   -- liftIO $ putStrLn "-----------------------------"
-  let smp = S.simplifyReactsCmd sp
+  typeOpt <- typeOption <$> liftReplState get
+  st <- typeCheckSource typeOpt sp
+  -- liftIO $ putStrLn "--- Typed source code ---"
+  -- liftIO $ putDoc $ pretty st <> hardline
+  -- liftIO $ putStrLn "-------------------------"
+  smp <- replSimplify st
   -- liftIO $ putStrLn "--- Simplified source code ---"
   -- liftIO $ putDoc $ pretty smp <> hardline
   -- liftIO $ putStrLn "------------------------------"
@@ -780,7 +998,11 @@ loadFileForExecution path = do
   -- liftIO $ putStrLn "--- Desugared Dual Core command ---"
   -- liftIO $ putDoc $ pretty dc <> hardline
   -- liftIO $ putStrLn "-----------------------------------"
-  ec <- prepExec dc
+  dt <- typeCheckCore typeOpt dc
+  -- liftIO $ putStrLn "--- Typed Dual Core command ---"
+  -- liftIO $ putDoc $ pretty (preCheckCore dt) <> hardline
+  -- liftIO $ putStrLn "-------------------------------"
+  ec <- prepExec dt
   -- liftIO $ putStrLn "--- Executable Dual Core command ---"
   -- liftIO $ putDoc $ pretty ec <> hardline
   -- liftIO $ putStrLn "------------------------------------"
@@ -816,9 +1038,11 @@ fileTrans cmd = do
 
 
 helpMessage = unlines
-  [ "<command>                 execute the given Coo command",
-    "#{\\n ...line... \\n#}      enter a command on multiple lines",
-    "#run \"<path>\"             read from file <path> and run the command within",
-    "#help                     this help message",
-    "Ctrl-c                    cancel the currently running command",
-    "Ctrl-d                    exit the Coo interpreter" ]
+  [ "<command>                   execute the given Coo command",
+    "#{\\n ...line... \\n#}        enter a command on multiple lines",
+    "#run \"<path>\"               read from file <path> and run the command within",
+    "#type <expression>          show the type of the given expression",
+    "#check ignore|warn|error    set type checking mode",
+    "#help                       this help message",
+    "Ctrl-c                      cancel the currently running command",
+    "Ctrl-d                      exit the Coo interpreter" ]

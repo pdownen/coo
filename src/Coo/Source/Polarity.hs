@@ -27,6 +27,9 @@ instance Eq a => Semigroup (Unified a) where
   Unknown <> y = y
   _ <> _       = Conflict
 
+instance Eq a => Monoid (Unified a) where
+  mempty = Unknown
+
 instance (Pretty a) => Pretty (Unified a) where
   pretty (Same a) = pretty a
   pretty Unknown  = pretty "<unknown>"
@@ -93,25 +96,22 @@ semiclosedPolarity m = do
     then return a
     else throwError $ UnboundConstraints env
 
-annotePolarity :: (MonadReader PolInEnv m) => Annotation -> m Strat
-annotePolarity (OfPolarity s) = return s
--- annotePolarity (OfType t)     = typePolarity t
-
--- typePolarity :: (MonadReader PolInEnv m) => Type -> m Strat
--- typePolarity | False = undefined
 
 quickTermPolarity :: (MonadReader PolInEnv m) => Term -> m (Maybe (Unified Strat))
-quickTermPolarity Nil         = return $ Just $ Same CBV
-quickTermPolarity (Pair _ _)  = return $ Just $ Same CBV
-quickTermPolarity (Make _ _)  = return $ Just $ Same CBV
-quickTermPolarity (Obj _)     = return $ Just $ Same CBV
-quickTermPolarity (Call _)    = return $ Just $ Same CBV
-quickTermPolarity (App _ _)   = return $ Just $ Same CBN
-quickTermPolarity (Dot _ _)   = return $ Just $ Same CBN
-quickTermPolarity (Fn _)      = return $ Just $ Same CBN
-quickTermPolarity (Shift s _) = return $ Just $ Same $ shiftTo s
-quickTermPolarity (Do r)      = quickReactionPolarity r
-quickTermPolarity (Var x)     = do
+quickTermPolarity Nil          = return $ Just $ Same CBV
+quickTermPolarity (Pair _ _)   = return $ Just $ Same CBV
+quickTermPolarity (Make _ _)   = return $ Just $ Same CBV
+quickTermPolarity (Obj _)      = return $ Just $ Same CBV
+quickTermPolarity (Call _)     = return $ Just $ Same CBV
+quickTermPolarity (App _ _)    = return $ Just $ Same CBN
+quickTermPolarity (Dot _ _)    = return $ Just $ Same CBN
+quickTermPolarity (Fn _)       = return $ Just $ Same CBN
+quickTermPolarity (Shift s _)  = return $ Just $ Same $ shiftTo s
+quickTermPolarity (AsType t a) = case castAnnote a of
+  Annote (Check s) _ -> return $ Just $ Same s
+  _                  -> quickTermPolarity t
+quickTermPolarity (Do r)       = quickReactionPolarity r
+quickTermPolarity (Var x)      = do
   cxt <- fromCxt <$> ask
   return $ case M.lookup x cxt of
     Just s  -> Just $ Same s
@@ -126,7 +126,7 @@ quickReactionPolarity (_     `Rec`  _) = return $ Just $ Same CBN
 quickReactionPolarity (Exec _)         = return $ Just $ Unknown
 quickReactionPolarity (Eval t)         = quickTermPolarity t
 quickReactionPolarity (Guard _ _ r)    = quickReactionPolarity r
-quickReactionPolarity (LetFun _ r)     = quickReactionPolarity r
+quickReactionPolarity (LetFun _ _ r)   = quickReactionPolarity r
 quickReactionPolarity (Else _ r)       = quickReactionPolarity r
 quickReactionPolarity Cede             = return $ Nothing
 quickReactionPolarity (r1 `Alt` r2)    = (<>) <$> p1 <*> p2
@@ -144,9 +144,48 @@ autoShiftTarget CBV CBN = Shift (PS CBV Me)
 autoShiftTarget CBN CBV = Shift (PS CBN Me)
 autoShiftTarget _   _   = id
 
-autoGoTo :: Term -> Strat -> Strat -> Maybe Term -> Statement
-autoGoTo u s s' Nothing  = Go (autoShift s s' u) (Just (OfPolarity s')) Nothing
-autoGoTo u s s' (Just t) = Go u (Just (OfPolarity s)) (Just $ autoShiftTarget s' s t)
+autoGoTo :: Term -> Strat -> Maybe Annotation -> Strat -> Maybe Term -> Statement
+autoGoTo u s a s' Nothing  =
+  Go (autoShift s s' u) (Just $ strategizeAnnote (Check s') a) Nothing
+autoGoTo u s a s' (Just t) =
+  Go u (Just $ strategizeAnnote (Check s) a) (Just $ autoShiftTarget s' s t)
+
+directTypeAnnote :: (MonadPolar m)
+                 => Term -> Maybe Annotation -> Maybe Term
+                 -> m (Maybe Annotation)
+directTypeAnnote u ann t = do
+  left <- mustCheckTerm u
+  right <- mustCheckGoToTarget t
+  case (left, right) of
+    (False, True)  -> return $ Just $ assignTypeAnnote GoTo ann
+    (True, False)  -> return $ Just $ assignTypeAnnote ToGo ann
+    (False, False) -> return $ Just $ assignTypeAnnote GoTo ann
+    _              -> return ann
+
+mustCheckTerm :: (MonadPolar m) => Term -> m Bool
+mustCheckTerm (App _ _)    = return False
+mustCheckTerm (Dot _ _)    = return False
+mustCheckTerm (AsType _ _) = return False
+mustCheckTerm (Var x)      = do
+  env <- fromCxt <$> ask
+  return $ not $ M.member x env
+mustCheckTerm (Do r)       = return $ mustCheckReact r
+mustCheckTerm (Fn r)       = return $ mustCheckReact r
+mustCheckTerm (Obj t)      = mustCheckTerm t
+mustCheckTerm (Call t)     = mustCheckTerm t
+mustCheckTerm (Shift _ t)  = mustCheckTerm t
+mustCheckTerm _            = return True
+
+mustCheckGoToTarget :: (MonadPolar m) => Maybe Term -> m Bool
+mustCheckGoToTarget t = case t of
+  Nothing -> mustCheckTerm (Var (Implicit Context))
+  Just u  -> mustCheckTerm u
+
+mustCheckReact :: Reaction -> Bool
+mustCheckReact (Eval _)         = False
+mustCheckReact (Exec _)         = False
+mustCheckReact (Rest (Any _) r) = mustCheckReact r
+mustCheckReact _                = True
 
 polarizeTerm :: (MonadPolar m) => Strat -> Term -> m Term
 polarizeTerm CBV Nil        = return Nil
@@ -163,6 +202,7 @@ polarizeTerm CBV (Do r)
   | otherwise               = autoShift CBN CBV . Do <$> polarizeReact CBN r
 polarizeTerm s (Shift p t)
   | s == shiftTo p          = Shift p <$> polarizeTerm (shiftTo p) t
+polarizeTerm s (AsType t a) = AsType <$> polarizeTerm s t <*> pure (strategizeCast (Check s) a)
 polarizeTerm s t@(Var x)    = do
   cxt <- fromCxt <$> ask
   case M.lookup x cxt of
@@ -207,9 +247,9 @@ polarizeCaveat (p, t) = (p,) <$> polarizeTerm CBV t
 
 polarizeStmt :: (MonadPolar m) => Statement -> m Statement
 polarizeStmt (Run t)                = Run <$> polarizeTerm CBV t
-polarizeStmt (LocalFun r)           = case extractSelfName r of
-  Just x  -> bindPolarity x CBN $ LocalFun <$> polarizeReact CBN r
-  Nothing -> LocalFun <$> polarizeReact CBN r
+polarizeStmt (LocalFun d r)         = case extractFunName d r of
+  Just x  -> bindPolarity x CBN $ LocalFun d <$> polarizeReact CBN r
+  Nothing -> LocalFun d <$> polarizeReact CBN r
 polarizeStmt (Case t r)             = Case <$> polarizeTerm CBV t <*> polarizeReact CBN r
 polarizeStmt (If r)                 = If <$> polarizeGuard r
 polarizeStmt (SetMatch p t grd els) = do
@@ -218,12 +258,13 @@ polarizeStmt (SetMatch p t grd els) = do
   els' <- traverse (polarizeReact CBN) els
   return $ SetMatch p t' grd' els'
 
-polarizeStmt (Go u (Just a) t)     = do
-  s <- annotePolarity a
+polarizeStmt (Go u a t)
+  | Just s <- a >>= fromDir . stratOf  = do
   u' <- polarizeTerm s u
   t' <- polarizeGoToTarget (opStrat s) t
-  return $ Go u' (Just a) t'
-polarizeStmt c@(Go u Nothing t)    = do
+  a' <- directTypeAnnote u' a t'
+  return $ Go u' a' t'
+polarizeStmt c@(Go u a t)           = do
   s_u <- quickTermPolarity u
   s_t <- case t of
     Just e  -> quickTermPolarity e
@@ -233,11 +274,13 @@ polarizeStmt c@(Go u Nothing t)    = do
     (_, Just (Same s'), _) -> do
       u' <- polarizeTerm s' u
       t' <- polarizeGoToTarget (opStrat s') t
-      return $ Go u' (Just $ OfPolarity s') t'
+      a' <- strategizeAnnote (Check s') <$> directTypeAnnote u' a t'
+      return $ Go u' (Just a') t'
     (Just (Same s1), Just Conflict, Just (Same s2)) -> do
       u' <- polarizeTerm s1 u
       t' <- polarizeGoToTarget s2 t
-      return $ autoGoTo u' s1 (opStrat s2) t'
+      a' <- directTypeAnnote u' a t'
+      return $ autoGoTo u' s1 a' (opStrat s2) t'
     _ -> throwError $ UnpolarizedCommand c
 
 polarizeGoToTarget :: (MonadPolar m) => Strat -> Maybe Term -> m (Maybe Term)
@@ -272,8 +315,8 @@ bindCopatPolarity q = local (copatPolarityEnv q <>)
 
 stmtPolarityEnv :: Statement -> PolInEnv
 stmtPolarityEnv s = case s of
-  LocalFun r
-    | Just x <- extractSelfName r   -> PolIn $ M.singleton x CBN
+  LocalFun d r
+    | Just x <- extractFunName d r  -> PolIn $ M.singleton x CBN
   SetMatch p _ (Just (Just q, _)) _ -> patPolarityEnv q <> patPolarityEnv p
   SetMatch p _ _                  _ -> patPolarityEnv p
   _                                 -> PolIn M.empty

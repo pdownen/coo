@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -81,11 +82,18 @@ data Bound x i o c a
   | LetFun o (Cls x i o c a)
   deriving (Show, Functor, Foldable, Traversable)
 
-data Type x i = TyVar x
-  deriving (Show, Functor)
-
 data Dir o = GoTo | ToGo | Infer | Check o
   deriving (Show, Eq, Functor)
+
+data Type x i
+  = VarTy x
+--  | RecTy x (Type x i)
+  | UnitTy
+  | Type x i `PairTy` Type x i
+  | TagTy (M.Map i (Type x i))
+  | ObjTy (Type x i)
+  | SameTypeAs x
+  deriving (Show, Ord)
 
 data Strat = CBV | CBN
   deriving (Show, Eq, Bounded, Enum)
@@ -97,6 +105,9 @@ opp CBN = CBV
 instance (Eq c) => Eq (Cls x i o c a) where
   Free x == Free y = x == y
   _ == _ = False
+
+instance (Ord x, Ord i) => Eq (Type x i) where
+  s == t = openTypeEquality (freeTypeVars s) s t
 
 instance Bifunctor (Pat i) where
   bimap _ g (A x) = A (g x)
@@ -182,6 +193,21 @@ instance Functor (Trm x i) where
   fmap f (New p)   = New (bimap f' f' p)
     where f' = fmap f
 
+castPat :: Pat i c a -> Maybe (Pat i c' a')
+castPat MT        = Just MT
+castPat (i :@: p) = (i :@:) <$> castPat p
+castPat (p :*: q) = (:*:) <$> castPat p <*> castPat q
+castPat _         = Nothing
+
+data GenericPat i where
+  GenPat :: Pat i c a -> GenericPat i
+
+data Elide = Elide
+  deriving (Show, Eq, Ord, Enum, Bounded)
+
+instance (Show i) => Show (GenericPat i) where
+  show (GenPat p) = show $ bimap (const Elide) (const Elide) p
+
 mapPoleVal :: (o -> p) -> Val x i o c a -> Val x i p c a
 mapPoleVal f (Struc p) = Struc $ first (mapPoleCls f) p
 
@@ -192,6 +218,10 @@ mapPoleCls f (t :/: e) = fmap f t :/: fmap (mapPoleBound f) e
 mapPoleBound :: (o -> p) -> Bound x i o c a -> Bound x i p c a
 mapPoleBound f (LetVal o v) = LetVal (f o) (mapPoleVal f v)
 mapPoleBound f (LetFun o c) = LetFun (f o) (mapPoleCls f c)
+
+getPoleBound :: Bound x i o c a -> o
+getPoleBound (LetVal o _) = o
+getPoleBound (LetFun o _) = o
 
 mapVarCmd :: Ord y => (x -> y) -> Cmd x i o -> Cmd y i o
 mapVarCmd f (Cut t o u) = Cut (mapVarTrm f t) o (mapVarTrm f u)
@@ -217,3 +247,45 @@ mapVarClsVal f (t :/: e) = mapVarTrm f t :/: e'
 mapVarBoundVal :: Ord y => (x -> y) -> Bound x i o x x -> Bound y i o y y
 mapVarBoundVal f (LetVal o v) = LetVal o (mapVarDatVal f v)
 mapVarBoundVal f (LetFun o c) = LetFun o (mapVarClsVal f c)
+
+freeTypeVars :: (Ord x) => Type x i -> M.Map x x
+freeTypeVars (VarTy x)      = M.singleton x x
+-- freeTypeVars (RecTy x t)    = M.delete x $ freeTypeVars t
+freeTypeVars UnitTy         = M.empty
+freeTypeVars (s `PairTy` t) = freeTypeVars s <> freeTypeVars t
+freeTypeVars (TagTy xts)    = M.unions [ freeTypeVars t | (_, t) <- M.toList xts ]
+freeTypeVars (ObjTy t)      = freeTypeVars t
+freeTypeVars (SameTypeAs _) = M.empty
+
+renameTypeVars :: (Ord x) => M.Map x x -> Type x i -> Type x i
+renameTypeVars sub (VarTy x)      = case M.lookup x sub of
+  Just y  -> VarTy y
+  Nothing -> VarTy x
+-- renameTypeVars sub (RecTy x t)
+--   | M.null sub'                  = RecTy x t
+--   | otherwise                    = RecTy x $ renameTypeVars sub' t
+--   where sub' = M.delete x sub
+renameTypeVars _   UnitTy         = UnitTy
+renameTypeVars sub (s `PairTy` t) = renameTypeVars sub s `PairTy` renameTypeVars sub t
+renameTypeVars sub (TagTy zts)    = TagTy $ renameTypeVars sub <$> zts
+renameTypeVars sub (ObjTy t)      = ObjTy $ renameTypeVars sub t
+renameTypeVars _   (SameTypeAs x) = SameTypeAs x
+
+openTypeEquality :: (Ord x, Ord i) => M.Map x x -> Type x i -> Type x i -> Bool
+openTypeEquality eq s t = case (s, t) of
+  (VarTy x, VarTy y) -> case M.lookup x eq of
+    Nothing -> False
+    Just z  -> y == z
+--  (RecTy x s', RecTy y t') -> openTypeEquality (M.insert x y eq) s' t'
+  (ObjTy s', ObjTy t') -> openTypeEquality eq s' t'
+  (UnitTy, UnitTy) -> True
+  (s1 `PairTy` s2, t1 `PairTy` t2) ->
+    openTypeEquality eq s1 t1 && openTypeEquality eq s2 t2
+  (TagTy xss, TagTy yts) -> M.keys xss == M.keys yts
+    && and [ sameTagEq x s' | (x, s') <- M.toList xss ]
+    where sameTagEq x s'
+            | Just t' <- M.lookup x yts = openTypeEquality eq s' t'
+            | otherwise                 = False
+  (SameTypeAs x, SameTypeAs y) -> x == y
+  (_, _) -> False
+

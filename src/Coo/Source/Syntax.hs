@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -30,12 +31,13 @@ data Literal
 data Statement
   = Go Term (Maybe Annotation) (Maybe Term)
   | Run Term
-  | LocalFun Reaction
+  | LocalFun FunDeclare Reaction
   | SetMatch Pattern Term (Maybe SetCaveat) (Maybe Reaction)
   | If Reaction
   | Case Term Reaction
   deriving (Show)
 
+type FunDeclare = (Maybe Variable, Maybe Type)
 type SetCaveat = (Maybe Pattern, Term)
 
 type Command = [Statement]
@@ -52,10 +54,14 @@ data Term
   | Make Literal Term
   | Term `Dot` Literal
   -- | Term `Get` Variable
+  | Term `AsType` TypeCast
   | Shift PolarityShift Term
   deriving (Show)
 
 type CoTerm = Term
+
+data TypeCast = PrefixType Annotation | PostfixType Annotation
+  deriving (Show)
 
 data Pattern
   = Any Parameter
@@ -80,7 +86,7 @@ data Reaction
   | Literal `Proj` Reaction
   | CoPattern `Rec` Reaction
   | Guard (Maybe Pattern) Term Reaction
-  | LetFun Reaction Reaction
+  | LetFun FunDeclare Reaction Reaction
   | Else Parameter Reaction
   | Reaction `Alt` Reaction
   | Cede
@@ -88,7 +94,7 @@ data Reaction
 
 data Declaration
   = Field Pattern Term
-  | Function Reaction
+  | Function FunDeclare Reaction
   deriving (Show)
 
 type Bindings = [Declaration]
@@ -97,10 +103,11 @@ data Module
   = Package Bindings Term
   deriving (Show)
 
-data Annotation
-  = OfType Type
-  | OfPolarity Strat
-  deriving (Show)
+data Annotation = Annote { stratOf :: Dir Strat, typeOf :: Dir Type }
+  deriving (Show, Eq, Ord)
+
+data Dir a = Check a | GoTo | ToGo | Infer
+  deriving (Show, Eq, Ord, Functor)
 
 data PolarityShift = PS { shiftTo :: Strat, whoShifts :: Who }
   deriving (Show, Eq)
@@ -116,14 +123,40 @@ opStrat CBV = CBN
 opStrat CBN = CBV
 
 data Type
-  = TyVar Variable
-  deriving (Show)
+  = VarTy Variable
+--  | RecTy Variable Type
+  | UnitTy
+  | Type `PairTy` Type
+  | Type `ArrowTy` Type
+  | TagTy [(Literal, Type)]
+  | ObjTy Type
+  deriving (Show, Eq, Ord)
 
 instance Semigroup Reaction where
   (<>) = Alt
   
 instance Monoid Reaction where
   mempty = Cede
+
+pattern Blank :: Parameter
+pattern Blank = Unbound "_"
+
+pattern IntTyName, FloatTyName, StringTyName :: Variable
+pattern IntTyName    = "int"
+pattern FloatTyName  = "float"
+pattern StringTyName = "string"
+
+pattern IntTy, FloatTy, StringTy :: Type
+pattern IntTy    = VarTy IntTyName
+pattern FloatTy  = VarTy FloatTyName
+pattern StringTy = VarTy StringTyName
+
+pattern BoolTy :: Type
+pattern BoolTy = TagTy [(Tag "False", UnitTy), (Tag "True", UnitTy)]
+
+pattern TruePat, FalsePat :: Pattern
+pattern TruePat = Made (Tag "True") IsNil
+pattern FalsePat = Made (Tag "False") IsNil
 
 isAction :: Reaction -> Bool
 isAction (Eval _)         = True
@@ -142,6 +175,10 @@ isConditional Cede          = True
 isConditional (r1 `Alt` r2) = isConditional r1 && isConditional r2
 isConditional _             = False
 
+extractFunName :: FunDeclare -> Reaction -> Maybe Parameter
+extractFunName (Just x, _)  _ = Just $ Bound x
+extractFunName (Nothing, _) r = extractSelfName r
+
 extractSelfName :: Reaction -> Maybe Parameter
 extractSelfName (q `Rec` _)   = extractSelfBind q
 extractSelfName (r `Alt` r')  = extractSelfName r <|> extractSelfName r'
@@ -153,6 +190,9 @@ extractSelfBind (SelfIs (Unbound _)) = Nothing
 extractSelfBind (SelfIs x)           = Just x
 extractSelfBind (q `CoApp` _)        = extractSelfBind q
 extractSelfBind (q `CoDot` _)        = extractSelfBind q
+
+emptyFunDecl :: FunDeclare
+emptyFunDecl = (Nothing, Nothing)
 
 copatToTerm :: CoPattern -> Term
 copatToTerm (SelfIs x)    = Var x
@@ -177,14 +217,6 @@ reassocToCoPat q (p' `IsPair` p) = reassocToCoPat (q `CoApp` p') p
 reassocToCoPat q (i `Made` p)    = reassocToCoPat (q `CoDot` i) p
 reassocToCoPat q p               = (q, p)
 
-
-pattern TruePat, FalsePat :: Pattern
-pattern TruePat = Made (Tag "True") IsNil
-pattern FalsePat = Made (Tag "False") IsNil
-
-pattern Blank :: Parameter
-pattern Blank = Unbound "_"
-
 abridgeReaction :: Reaction -> Reaction
 abridgeReaction Cede          = Cede
 abridgeReaction (r1 `Alt` r2) = abridgeReaction r1 `Alt` abridgeReaction r2
@@ -195,7 +227,49 @@ abridgeReaction (i `Proj` r)  = i `Proj` abridgeReaction r
 abridgeReaction (Guard p t r) = Guard p t (abridgeReaction r)
 abridgeReaction _             = Cede
 
-endRunGoesTo :: CoTerm -> Command -> Command
-endRunGoesTo k [Run u] = [Go u (Just (OfPolarity CBV)) (Just k)]
-endRunGoesTo _ []      = []
-endRunGoesTo k (s:c)   = s : endRunGoesTo k c
+endRunGoes :: Maybe Annotation -> Command -> Command
+endRunGoes a = endRunGoesTo a Nothing
+
+endRunGoesTo :: Maybe Annotation -> Maybe CoTerm -> Command -> Command
+endRunGoesTo a k [Run u] = [Go u a k]
+endRunGoesTo _ _ []      = []
+endRunGoesTo a k (s:c)   = s : endRunGoesTo a k c
+
+pattern OfPolarity :: Strat -> Annotation
+pattern OfPolarity s = Annote (Check s) Infer
+
+pattern OfType :: Type -> Annotation
+pattern OfType t = Annote Infer (Check t)
+
+pattern NoAnnote :: Annotation
+pattern NoAnnote = Annote Infer Infer
+
+pattern StratTy :: Strat -> Type -> Annotation
+pattern StratTy s t = Annote (Check s) (Check t)
+
+fromDir :: Dir a -> Maybe a
+fromDir (Check a) = Just a
+fromDir _         = Nothing
+
+toDir :: Maybe a -> Dir a
+toDir (Just a) = Check a
+toDir Nothing  = Infer
+
+strategizeAnnote :: Dir Strat -> Maybe Annotation -> Annotation
+strategizeAnnote s Nothing  = Annote s Infer
+strategizeAnnote s (Just a) = a{stratOf = s}
+
+assignTypeAnnote :: Dir Type -> Maybe Annotation -> Annotation
+assignTypeAnnote t         Nothing  = Annote Infer t
+assignTypeAnnote (Check t) (Just a) = a{typeOf = Check t}
+assignTypeAnnote t         (Just a) = case a of
+  Annote _ (Check _) -> a
+  Annote s _         -> Annote s t
+
+strategizeCast :: Dir Strat -> TypeCast -> TypeCast
+strategizeCast s (PrefixType a)  = PrefixType $ strategizeAnnote s (Just a)
+strategizeCast s (PostfixType a) = PostfixType $ strategizeAnnote s (Just a)
+
+castAnnote :: TypeCast -> Annotation
+castAnnote (PrefixType a)  = a
+castAnnote (PostfixType a) = a

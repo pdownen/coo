@@ -11,23 +11,33 @@ import qualified Text.Megaparsec.Char.Lexer as L
 
 type Parser = Parsec Void String
 
-initial, final, whole :: Parser a -> Parser a
-initial p = skipSpace *> p
+initial, final, whole, perfect :: Parser a -> Parser a
+initial p = skipComments *> p
 final p   = p <* eof
 whole p   = final (initial p)
+perfect p = skipSpaceOnly *> p <* eof
+
+anything :: Parser String
+anything = takeRest
 
 lineComment, blockComment :: Parser ()
-lineComment = L.skipLineComment "# "
+lineComment = L.skipLineComment "#"
 blockComment = L.skipBlockCommentNested "#[" "]#"
 
-skipSpace :: Parser ()
-skipSpace = L.space space1 lineComment blockComment
+skipComments :: Parser ()
+skipComments = L.space space1 lineComment blockComment
+
+skipSpaceOnly :: Parser ()
+skipSpaceOnly = L.space space1 empty empty
 
 lexeme :: Parser a -> Parser a
-lexeme = L.lexeme skipSpace
+lexeme = L.lexeme skipComments
+
+exact :: String -> Parser String
+exact = L.symbol skipSpaceOnly
 
 str :: String -> Parser String
-str = L.symbol skipSpace
+str = L.symbol skipComments
 
 parens, braces, brackets, angles :: Parser a -> Parser a
 parens   = between (str "(") (str ")")
