@@ -489,12 +489,24 @@ elaborateTerm mo t = case (mo, t) of
       Just (Same s ::? Typed a) -> return ((Do (Any x `Rest` Eval u'), opStrat s ::: a),
                                            TyOut . M.delete x . toCxt)
       _                         -> throwError $ UntypedTerm $ Do (Any x `Rest` (Eval u))
+  (Nothing, Make i Nil)
+    | Just a <- inferLiteralBaseType i -> do
+        let ann = Annote (Check CBV) (Check a)
+        return (t `AsType` PostfixType ann, CBV ::: a)
   (Just o, _) -> do
     (t', o') <- inferTypeTerm t
     if o == o'
       then return (t', o')
       else throwError $ MistypedTerm o t' o'
   (Nothing, _) -> throwError $ UntypedTerm t
+
+inferLiteralBaseType :: Literal -> Maybe Type
+inferLiteralBaseType (Int _)  = Just IntTy
+inferLiteralBaseType (Flt _)  = Just FloatTy
+inferLiteralBaseType (Str _)  = Just StringTy
+inferLiteralBaseType TrueTag  = Just BoolTy
+inferLiteralBaseType FalseTag = Just BoolTy
+inferLiteralBaseType _        = Nothing
 
 checkTypeTerm :: (MonadType m) => ElabPole -> Term -> m Term
 checkTypeTerm o t = fst <$> elaborateTerm (Just o) t

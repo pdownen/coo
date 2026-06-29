@@ -141,22 +141,29 @@ instance Monoid Reaction where
 pattern Blank :: Parameter
 pattern Blank = Unbound "_"
 
-pattern IntTyName, FloatTyName, StringTyName :: Variable
+pattern IntTyName, FloatTyName, StringTyName, BoolTyName :: Variable
 pattern IntTyName    = "int"
 pattern FloatTyName  = "float"
 pattern StringTyName = "string"
+pattern BoolTyName   = "bool"
 
-pattern IntTy, FloatTy, StringTy :: Type
+pattern IntTy, FloatTy, StringTy, BoolTy :: Type
 pattern IntTy    = VarTy IntTyName
 pattern FloatTy  = VarTy FloatTyName
 pattern StringTy = VarTy StringTyName
+pattern BoolTy   = VarTy BoolTyName
 
-pattern BoolTy :: Type
-pattern BoolTy = TagTy [(Tag "False", UnitTy), (Tag "True", UnitTy)]
+pattern TrueName, FalseName :: TagName
+pattern TrueName  = "True"
+pattern FalseName = "False"
+
+pattern TrueTag, FalseTag :: Literal
+pattern TrueTag  = Tag TrueName
+pattern FalseTag = Tag FalseName
 
 pattern TruePat, FalsePat :: Pattern
-pattern TruePat = Made (Tag "True") IsNil
-pattern FalsePat = Made (Tag "False") IsNil
+pattern TruePat  = Made TrueTag  IsNil
+pattern FalsePat = Made FalseTag IsNil
 
 isAction :: Reaction -> Bool
 isAction (Eval _)         = True

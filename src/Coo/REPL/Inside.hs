@@ -730,7 +730,7 @@ replHandlers = Extern
 -------------------------
 
 primTyTable :: [S.PrimType]
-primTyTable = [ intPrimTy, floatPrimTy, stringPrimTy ]
+primTyTable = [ intPrimTy, floatPrimTy, stringPrimTy, boolPrimTy ]
 
 intPrimTy :: S.PrimType
 intPrimTy = PrimTy { primTyName   = S.IntTyName,
@@ -754,6 +754,15 @@ stringPrimTy = PrimTy { primTyName   = S.StringTyName,
   where anyStr (S.Str s :@: MT)  = Just (S.Str s :@: MT)
         anyStr (S.Str s :@: A p) = Just (S.Str s :@: A (UnitTy, p))
         anyStr _                 = Nothing
+
+boolPrimTy :: S.PrimType
+boolPrimTy = PrimTy { primTyName   = S.BoolTyName,
+                      checkPrimPat = trueOrFalse }
+  where trueOrFalse (i :@: MT)
+          | i == S.TrueTag || i == S.FalseTag = Just (i :@: MT)
+        trueOrFalse (i :@: A p)
+          | i == S.TrueTag || i == S.FalseTag = Just (i :@: A (UnitTy, p))
+        trueOrFalse _                         = Nothing
 
 
 primOpTable :: [(OpIO, S.Type)]
