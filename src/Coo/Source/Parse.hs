@@ -125,7 +125,7 @@ funBody def =  fun_ *> reactEq (gives <|> equal)
            <?> "function"
 
 funDecl :: Parser FunDeclare
-funDecl =  try (fun_ *> ((,) <$> optional variable <*> optional ofType) <* semicolon)
+funDecl =  (,) <$> try (fun_ *> optional variable <* colon) <*> (Just <$> typ) <* semicolon
        <|> pure (Nothing, Nothing)
        <?> "function declaration"
 
@@ -447,7 +447,9 @@ basicType =  VarTy <$> variable
          <?> "basic type"
 
 tagType :: Parser (Literal, Type)
-tagType = (,) <$> literal <*> ofType
+tagType = makeTagged <$> literal <*> optional ofType
+  where makeTagged i Nothing  = (i, UnitTy)
+        makeTagged i (Just t) = (i, t)
 
 coreTyOpTable :: OperationTable Parser Type
 coreTyOpTable = [ rightward $ infixROp pairTyOp <> infixROp arrowTyOp ]
