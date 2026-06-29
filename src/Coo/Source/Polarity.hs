@@ -133,6 +133,20 @@ quickReactionPolarity (r1 `Alt` r2)    = (<>) <$> p1 <*> p2
   where p1 = quickReactionPolarity r1
         p2 = quickReactionPolarity r2
 
+autoPolarizeTerm :: (MonadPolar m) => Term -> m (Maybe Term)
+autoPolarizeTerm t = do
+  quick_strat <- quickTermPolarity t
+  case quick_strat of
+    Just (Same s) -> Just <$> polarizeTerm s t
+    _             -> return Nothing
+
+autoPolarizeReaction :: (MonadPolar m) => Reaction -> m (Maybe Reaction)
+autoPolarizeReaction r = do
+  quick_strat <- quickReactionPolarity r
+  case quick_strat of
+    Just (Same s) -> Just <$> polarizeReact s r
+    _             -> return Nothing
+
 
 autoShift :: Strat -> Strat -> Term -> Term
 autoShift CBV CBN = Shift (PS CBN You)

@@ -494,8 +494,8 @@ replSideInstruction =  G.exact "{" *> pure BeginMultiLine
                    <|> G.exact "}" *> pure EndMultiLine
                    <|> G.exact "run" *> (ExecuteFile <$> G.inlineQuote)
                    <|> G.exact "help" *> pure ReplHelp
-                   <|> G.exact "check" *> (SetTypeChecker <$> typeCheckingOption)
-                   <|> G.exact "type" *> (CheckTypeOfExpr <$> G.anything)
+                   <|> G.exact "type" *> (SetTypeChecker <$> typeCheckingOption)
+                   <|> G.exact "check" *> (CheckTypeOfExpr <$> G.anything)
                    <?> "repl side instruction (try asking for #!help)"
 
 typeCheckingOption :: G.Parser TypeCheckingOption
@@ -511,19 +511,45 @@ checkTypeOfExpr input = do
       return Nothing
     Right t -> do
       rs <- liftReplState get
-      case S.runTypeCheck (S.inferTypeTerm t) (typeSource rs) of
-        (Left err, env) -> do
-          liftIO $ putDoc $ pretty (SourceTypeErr err) <> hardline
+      let ps = polarSource rs
+      case S.runPolarize (S.autoPolarizeTerm t) ps of
+        (Left err, env) ->
+          processPolarResult rs (Left err, env)
+        (Right (Just t'), env) ->
+          processPolarResult rs (Right t', env)
+        (Right Nothing, _) -> do
+          liftIO $ putStrLn "Interpreted as a value"
+          liftIO $ putStrLn "----------------------"
+          processPolarResult rs $ S.runPolarize (S.polarizeTerm S.CBV t) ps
+          liftIO $ putStrLn "========================================"
+          liftIO $ putStrLn "Interpreted as a function"
+          liftIO $ putStrLn "-------------------------"
+          processPolarResult rs $ S.runPolarize (S.polarizeTerm S.CBN t) ps
+  where processPolarResult rs (Right t', _) = do
+          processTypeResult rs $ S.runTypeCheck (S.inferTypeTerm t') (typeSource rs)
+        processPolarResult _  (Left err, S.PolOut env) = do
+          liftIO $ putDoc $ pretty (SourcePolarityErr err) <> hardline
           liftIO $ putStrLn "----------------------------------------"
-          printConstraints env
+          if M.null env
+            then return ()
+            else liftIO $ putDoc $ vsep [ pretty "Constraints:",
+                                          indent 4 (pretty $ S.PolOut env),
+                                          mempty ]
           return Nothing
-        (Right (t', a), env) -> do
+
+        processTypeResult _ (Right (t', a), env) = do
           liftIO $ putDoc $ vsep [ pretty t',
                                    colon <+> pretty a,
                                    mempty ]
           printConstraints env
           return $ Just a
-  where printConstraints (S.TyOut env)
+        processTypeResult _ (Left err, env) = do
+          liftIO $ putDoc $ pretty (SourceTypeErr err) <> hardline
+          liftIO $ putStrLn "----------------------------------------"
+          printConstraints env
+          return Nothing
+
+        printConstraints (S.TyOut env)
           | M.null env = return ()
           | otherwise  = do
               liftIO $ putDoc $ vsep [ pretty "Constraints:",
@@ -1050,8 +1076,8 @@ helpMessage = unlines
   [ "<command>                   execute the given Coo command",
     "#{\\n ...line... \\n#}        enter a command on multiple lines",
     "#run \"<path>\"               read from file <path> and run the command within",
-    "#type <expression>          show the type of the given expression",
-    "#check ignore|warn|error    set type checking mode",
+    "#check <expression>         check the type of the given expression",
+    "#type ignore|warn|error     set type checking mode",
     "#help                       this help message",
     "Ctrl-c                      cancel the currently running command",
     "Ctrl-d                      exit the Coo interpreter" ]
