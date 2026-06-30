@@ -114,7 +114,12 @@ data ReplState = RS { lineno      :: Int,
                       typeSource  :: S.TyInEnv,
                       typeCore    :: DC.TyInEnv ExecId S.Literal,
                       checkpoint  :: GlobIO,
-                      typeOption  :: TypeCheckingOption }
+                      replOptions :: ReplOptions }
+
+data ReplOptions = RO { typeOption :: TypeCheckingOption,
+                        batchOption :: Bool,
+                        stopAfterTypes :: Bool }
+  deriving (Show, Eq)
 
 data ReplError
   = ParseErr (ParseErrorBundle String Void)
@@ -307,14 +312,19 @@ desugarTyInEnv (S.TyIn ptys vars) = DC.TyIn ptys' vars'
                               S.desugarStrat s DC.::: S.desugarType t)
                            | (x, s S.::: t) <- M.toList vars ]
 
+defaultOptions :: ReplOptions
+defaultOptions = RO { typeOption  = IgnoreTypes,
+                      batchOption = False,
+                      stopAfterTypes = False }
+
 makeInitRS :: [S.PrimType] -> [(OpIO, S.Type)] -> ReplState
 makeInitRS primTys primOps =
   RS { lineno = 0,
        polarSource = makePolarityEnv primOps,
-       typeSource = tyInEnv,
-       typeCore   = desugarTyInEnv tyInEnv,
-       checkpoint = makeInitGlob primOps,
-       typeOption = IgnoreTypes }
+       typeSource  = tyInEnv,
+       typeCore    = desugarTyInEnv tyInEnv,
+       checkpoint  = makeInitGlob primOps,
+       replOptions = defaultOptions }
   where tyInEnv = makeSourceTyInEnv primTys primOps
 
 initRS :: ReplState
@@ -323,36 +333,56 @@ initRS = makeInitRS primTyTable primOpTable
 initCmd :: ExecCmd
 initCmd = DC.Cut DC.NilVal DC.CBV (DC.Var (Internal DC.Join))
 
+batchCmd :: FilePath -> ExecCmd
+batchCmd path = DC.Cut (DC.Lit $ S.Str $ Txt.pack path) DC.CBV (DC.Var (Internal DC.Join))
+
+runScript :: ReplOptions -> FilePath -> IO ()
+runScript opts path = do
+  result <- runPromptIOinit $ runReplIOinit $ do
+    liftReplState $ modify $ \rs -> rs{replOptions = opts}
+    captureNextJoin
+    cmd <- loadFileForExecution path
+    DC.loop cmd
+  case result of
+    (Right (), _) -> return ()
+    (Left err, _) -> putDoc $ pretty err <> hardline
+
 replTop :: IO r
-replTop = do
+replTop = replTopWith defaultOptions initCmd
+
+replTopWith :: ReplOptions -> ExecCmd -> IO r
+replTopWith opt cmd = do
   globr <- newIORef initGlob
-  rsr <- newIORef initRS
+  rsr <- newIORef initRS{replOptions = opt}
   hsr <- newIORef emptyHistory
   let chk = Save globr rsr hsr
-  runPromptIO chk $ runReplIOinit replStart
-  forever (runPromptIO chk $ runReplIOinit $ replRestart)
+  runPromptIO chk $ runReplIOinit $ replStart cmd
+  forever (runPromptIO chk $ runReplIOinit $ replRestart cmd)
 
-replStart :: ReplIO ()
-replStart = do
+replStart :: ExecCmd -> ReplIO ()
+replStart cmd = do
   captureNextJoin
   checkpointSave
-  overInput withInterrupt replLoop
+  overInput withInterrupt $ replLoop cmd
 
-replRestart :: ReplIO ()
-replRestart = do
+replRestart :: ExecCmd -> ReplIO ()
+replRestart cmd = do
   checkpointReload
-  overInput withInterrupt replLoop
+  overInput withInterrupt $ replLoop cmd
 
-replLoop :: ReplIO ()
-replLoop =
+replLoop :: ExecCmd -> ReplIO ()
+replLoop cmd =
   handleInterrupt
   (liftIO $ putStrLn "...")
-  (DC.loop initCmd -- DC.loopBy printStep initCmd
+  (DC.loop cmd -- DC.loopBy printStep cmd
    `catchError`
    \err -> do
      liftIO $ putDoc $ pretty err <> hardline
-     checkpointLoad
-     replLoop)
+     batch <- batchOption . replOptions <$> liftReplState get
+     if batch
+       then liftIO exitFailure
+       else do checkpointLoad
+               replLoop cmd)
 
 printStep m = do
   liftIO $ putStrLn "=== Next command step ==="
@@ -364,7 +394,7 @@ printStep m = do
   liftIO $ putStrLn ">>>>>>>>>>>>>>>>>>>>>>>>>"
   liftIO $ putStrLn "========================="
   return c
-  
+
 
 replNextPOp :: ReplState -> OpIO
 replNextPOp rs = POp { opName = Txt.pack $ "repl#" ++ show (lineno rs),
@@ -384,7 +414,12 @@ nextCommand :: ReplState -> ReplIO ExecCmd
 nextCommand rs = do
   resetReplPrompt rs
   input <- gatherInput (lineno rs)
-  sc <- replParse (lineno rs) input
+  processCommand ("repl line " ++ show (lineno rs)) input
+
+processCommand :: String -> String -> ReplIO ExecCmd
+processCommand place input = do
+  rs <- liftReplState get
+  sc <- replParse place input
   -- liftIO $ putStrLn "--- Parsed source code ---"
   -- liftIO $ putDoc $ pretty sc <> hardline
   -- liftIO $ putStrLn "--------------------------"
@@ -392,7 +427,7 @@ nextCommand rs = do
   -- liftIO $ putStrLn "--- Polarized source code ---"
   -- liftIO $ putDoc $ pretty sp <> hardline
   -- liftIO $ putStrLn "-----------------------------"
-  st <- typeCheckSource (typeOption rs) sp
+  st <- typeCheckSource (typeOption $ replOptions rs) sp
   -- liftIO $ putStrLn "--- Typed source code ---"
   -- liftIO $ putDoc $ pretty st <> hardline
   -- liftIO $ putStrLn "-------------------------"
@@ -404,10 +439,11 @@ nextCommand rs = do
   -- liftIO $ putStrLn "--- Desugared Dual Core command ---"
   -- liftIO $ putDoc $ pretty dc <> hardline
   -- liftIO $ putStrLn "-----------------------------------"
-  dt <- typeCheckCore (typeOption rs) dc
+  dt <- typeCheckCore (typeOption $ replOptions rs) dc
   -- liftIO $ putStrLn "--- Typed Dual Core command ---"
   -- liftIO $ putDoc $ pretty (preCheckCore dt) <> hardline
   -- liftIO $ putStrLn "-------------------------------"
+  afterTypeCheck
   ec <- prepExec dt
   -- liftIO $ putStrLn "--- Executable Dual Core command ---"
   -- liftIO $ putDoc $ pretty ec <> hardline
@@ -420,14 +456,6 @@ nextCommand rs = do
   incrementLineno
   captureNextJoin
   return fc
-
-{-
-gatherInput :: Int -> ReplIO String
-gatherInput ln = liftIO $ do
-  putStr $ show ln ++ "> "
-  hFlush stdout
-  getLine
--}
 
 data ReplAside = BeginMultiLine
                | EndMultiLine
@@ -470,9 +498,10 @@ gatherMultiLineInput ln more = do
         (_, Right (CheckTypeOfExpr str)) -> do
           checkTypeOfExpr str
           gatherMultiLineInput ln more
-        (Nothing, Right (SetTypeChecker opt)) -> do
-          liftReplState $ modify $ \rs -> rs{typeOption = opt}
-          let msg = case opt of
+        (Nothing, Right (SetTypeChecker mode)) -> do
+          liftReplState $ modify $ \rs ->
+            rs{replOptions = (replOptions rs){typeOption = mode}}
+          let msg = case mode of
                       IgnoreTypes -> "# now ignoring static types"
                       TypeWarnings -> "# now warning about static type errors"
                       TypeErrors -> "# now enforcing static types"
@@ -556,13 +585,13 @@ checkTypeOfExpr input = do
                                        indent 4 (pretty $ S.TyOut env),
                                        mempty ]
 
-replParse :: Int -> String -> ReplIO S.Command
-replParse ln input = do
-  case parse (G.whole S.command) ("repl line " ++ show ln) input of
+replParse :: (MonadError ReplError m) => String -> String -> m S.Command
+replParse place input = do
+  case parse (G.whole S.command) place input of
     Left err -> throwError $ ParseErr err
     Right sc -> return sc
 
-replPolar :: S.Command -> ReplIO S.Command
+replPolar :: (Monad m) => S.Command -> ReplT m S.Command
 replPolar sc = do
   env <- polarSource <$> liftReplState get
   case S.runPolarize (S.semiclosedPolarity $ S.polarizeCmd sc) env of
@@ -572,7 +601,7 @@ replPolar sc = do
       liftReplState $ modify $ \rs -> rs{polarSource = env' <> env}
       return sp
 
-typeCheckSource :: TypeCheckingOption -> S.Command -> ReplIO S.Command
+typeCheckSource :: (MonadIO m) => TypeCheckingOption -> S.Command -> ReplT m S.Command
 typeCheckSource IgnoreTypes c = return c
 typeCheckSource opt c = do
   rs <- liftReplState get
@@ -590,18 +619,19 @@ typeCheckSource opt c = do
                            return c
         TypeErrors   -> throwError tyerr
 
-replSimplify :: S.Command -> ReplIO S.Command
+replSimplify :: (Monad m) => S.Command -> ReplT m S.Command
 replSimplify cmd = do
-  RS{typeOption = opt} <- liftReplState get
+  opt <- typeOption . replOptions <$> liftReplState get
   case opt of
     IgnoreTypes -> return $ S.simplifyReactsCmd cmd
     _           -> return cmd
 
 isJoinConstraint env = M.keys env == [joinId]
 
-typeCheckCore :: TypeCheckingOption
+typeCheckCore :: (MonadIO m)
+              => TypeCheckingOption
               -> S.CoreCmd
-              -> ReplIO S.CoreCmd
+              -> ReplT m S.CoreCmd
 typeCheckCore IgnoreTypes c = return c
 typeCheckCore opt c = do
   env <- typeCore <$> liftReplState get
@@ -634,12 +664,19 @@ postCheckCore :: TypedCmd -> S.CoreCmd
 postCheckCore = fmap split
   where split (s ::: a) = (Check s, Check a)
 
+afterTypeCheck :: (MonadIO m) => ReplT m ()
+afterTypeCheck = do
+  dryRun <- stopAfterTypes . replOptions <$> liftReplState get
+  if dryRun
+    then liftIO exitSuccess
+    else return ()
+
 continueCmd :: S.Command -> S.Command
 continueCmd = S.endRunGoesTo (Just inferCBVFromTerm) (Just nextCont)
   where inferCBVFromTerm = S.Annote (S.Check S.CBV) S.GoTo
         nextCont = S.Var $ S.Implicit S.Join
 
-replTrans :: S.Command -> ReplIO S.CoreCmd
+replTrans :: (MonadError ReplError m) => S.Command -> m S.CoreCmd
 replTrans cmd = do
   lowered <- runExceptT $ S.desugarCmd $ continueCmd cmd
   case lowered of
@@ -659,10 +696,7 @@ replTrans stm = do
     Right dc -> return dc
 -}
 
--- checkDualCore :: S.CoreCmd -> ReplIO ()
--- checkDualCore cmd = do
-
-prepExec :: S.CoreCmd -> ReplIO ExecCmd
+prepExec :: (Monad m) => S.CoreCmd -> ReplT m ExecCmd
 prepExec c = do
   env <- locals <$> get
   let pols = DC.PolIn $ boundPolarity <$> env
@@ -729,13 +763,16 @@ joinId = Internal DC.Join
 captureNextJoin :: ReplIO ()
 captureNextJoin = do
   rs <- liftReplState get
-  captureNextJoinAs $ Free $ replNextPOp rs
+  let nextJoin
+        | batchOption (replOptions rs) = exitProgPOp
+        | otherwise                    = replNextPOp rs
+  captureNextJoinAs $ Free nextJoin
 
-captureNextJoinAs :: ExecCls -> ReplIO ()
+captureNextJoinAs :: (MonadState (Global ExecId i Strat c a f) m)
+                  => Cls ExecId i Strat c a -> m ()
 captureNextJoinAs j = do
   DC.bindCls joinId DC.CBV j
   return ()
-
 
 
 replHandlers :: Extern ExecId S.Literal DC.Strat OpIO Void ReplIO
@@ -748,8 +785,6 @@ replHandlers = Extern
     undefinedCode = \x -> throwError $ RuntimeErr $ UndefinedCode x,
     illdefinedData = \x o c -> throwError $ RuntimeErr $ IlldefinedData x o c,
     illdefinedCode = \x o v -> throwError $ RuntimeErr $ IlldefinedCode x o v }
-
-
 
 -------------------------
 -- Specific Primitives --
@@ -996,6 +1031,10 @@ pprintOp = POp {
       _ -> throwError $ RuntimeErr $ UnhandledPrimArg "print" [A () :*: C ()] v
   }
 
+exitProgPOp :: OpIO
+exitProgPOp = POp { opName = Txt.pack "exit",
+                    applyOp = \_ _ -> liftIO exitSuccess }
+
 runFileOp :: OpIO
 runFileOp = POp {
   opName = Txt.pack "run_file",
@@ -1012,6 +1051,11 @@ runFileOp = POp {
 loadFileForExecution :: FilePath -> ReplIO ExecCmd
 loadFileForExecution path = do
   txt <- liftIO $ readFile path
+  processCommand path txt
+{-
+loadFileForExecution path = do
+  typeOpt <- typeOption . replOptions <$> liftReplState get
+  txt <- liftIO $ readFile path
   sc <- parseFile path txt
   -- liftIO $ putStrLn "--- Parsed source code ---"
   -- liftIO $ putDoc $ pretty sc <> hardline
@@ -1020,7 +1064,6 @@ loadFileForExecution path = do
   -- liftIO $ putStrLn "--- Polarized source code ---"
   -- liftIO $ putDoc $ pretty sp <> hardline
   -- liftIO $ putStrLn "-----------------------------"
-  typeOpt <- typeOption <$> liftReplState get
   st <- typeCheckSource typeOpt sp
   -- liftIO $ putStrLn "--- Typed source code ---"
   -- liftIO $ putDoc $ pretty st <> hardline
@@ -1048,13 +1091,14 @@ loadFileForExecution path = do
   -- liftIO $ putStrLn "-----------------------------------"
   return fc
 
-parseFile :: FilePath -> String -> ReplIO S.Command
+parseFile :: (MonadError ReplError m)
+          => FilePath -> String -> m S.Command
 parseFile path input = do
   case parse (G.whole S.command) path input of
     Left err -> throwError $ ParseErr err
     Right sc -> return sc
 
-filePolar :: S.Command -> ReplIO S.Command
+filePolar :: (Monad m) => S.Command -> ReplT m S.Command
 filePolar sc = do
   env <- polarSource <$> liftReplState get
   case S.runPolarize (S.semiclosedPolarity $ S.polarizeCmd sc) env of
@@ -1064,12 +1108,14 @@ filePolar sc = do
       liftReplState $ modify $ \st -> st{polarSource = env' <> env}
       return sp
 
-fileTrans :: S.Command -> ReplIO S.CoreCmd
+fileTrans :: (MonadError ReplError m)
+          => S.Command -> m S.CoreCmd
 fileTrans cmd = do
   lowered <- runExceptT $ S.desugarCmd cmd
   case lowered of
     Left err -> throwError $ DesugarErr err
     Right dc -> return dc
+-}
 
 
 helpMessage = unlines
