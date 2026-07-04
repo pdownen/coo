@@ -22,7 +22,7 @@ anything = takeRest
 
 lineComment, blockComment :: Parser ()
 lineComment = L.skipLineComment "#"
-blockComment = L.skipBlockCommentNested "#[" "]#"
+blockComment = L.skipBlockCommentNested "[#" "#]"
 
 skipComments :: Parser ()
 skipComments = L.space space1 lineComment blockComment
