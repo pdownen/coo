@@ -448,10 +448,16 @@ tagType = makeTagged <$> literal <*> optional ofType
         makeTagged i (Just t) = (i, t)
 
 coreTyOpTable :: OperationTable Parser Type
-coreTyOpTable = [ rightward $ infixROp pairTyOp <> infixROp arrowTyOp ]
+coreTyOpTable = [ rightward
+                  $  infixROp pairTyOp
+                  <> infixROp arrowTyOp
+                  <> infixROp arrDoTyOp ]
 
 pairTyOp :: Parser (Type -> Type -> Type)
 pairTyOp = comma >> pure PairTy
 
 arrowTyOp :: Parser (Type -> Type -> Type)
 arrowTyOp = ks "->" >> pure ArrowTy
+
+arrDoTyOp :: Parser (Type -> Type -> Type)
+arrDoTyOp = ks "~>" >> pure ArrDoTy

@@ -11,21 +11,21 @@ fun repeat {f} where
   | from x .Tail = from (f x);
 
 fun | takes 0 {xs} = Nil
-		| takes n {xs} = Cons[xs.Head, takes (n-1) {xs.Tail}];
+    | takes n {xs} = Cons[xs.Head, takes (n-1) {xs.Tail}];
 
 fun | drops 0 {xs} = {xs}
     | drops n {xs} = drops (n-1) {xs.Tail};
 
 fun maps {f} where
   | stream{xs}.Head = f(xs.Head)
-	| stream{xs}.Tail = stream{xs.Tail};
+  | stream{xs}.Tail = stream{xs.Tail};
 
 fun | zips {xs} {ys} .Head = (xs.Head, ys.Head)
     | zips {xs} {ys} .Tail = zips {xs.Tail} {ys.Tail};
 
 fun zipsWith {f} where
   | combine {xs} {ys} .Head = f (xs.Head) (ys.Head)
-	| combine {xs} {ys} .Tail = combine {xs.Tail} {ys.Tail};
+  | combine {xs} {ys} .Tail = combine {xs.Tail} {ys.Tail};
 
 fun | evens{xs}.Head = xs.Head
     | evens{xs}.Tail = evens{xs.Tail.Tail};
@@ -33,6 +33,6 @@ fun | evens{xs}.Head = xs.Head
 fun | odds{xs}.Head = xs.Tail.Head
     | odds{xs}.Tail = odds{xs.Tail.Tail};
 
-fun | zigzag {xs} {_}  .Head = xs.Head
-    | zigzag {_}  {ys} .Tail.Head = ys.Head
-		| zigzag {xs} {ys} .Tail.Tail = zigzag {xs.Tail} {ys.Tail};
+fun | zigzag {xs} {ys} .Head = xs.Head
+    | zigzag {xs} {ys} .Tail.Head = ys.Head
+    | zigzag {xs} {ys} .Tail.Tail = zigzag {xs.Tail} {ys.Tail};

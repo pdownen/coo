@@ -1,8 +1,8 @@
 fun return x  = x;
 fun force {x} = x;
 
-fun fst(x,_) = x;
-fun snd(_,y) = y;
+fun fst(x,y) = x;
+fun snd(x,y) = y;
 
 fun | go zeroes to Head[{k}] = go 0 to k
     | go zeroes to Tail[{k}] = go {zeroes} to k;
@@ -20,21 +20,21 @@ fun repeat {f} where
   | from(x).Tail = {from(f x)};
 
 fun | takes 0 {xs} = Nil
-		| takes n {xs} = Cons[xs.Head, takes (n-1) (xs.Tail)];
+    | takes n {xs} = Cons[xs.Head, takes (n-1) (xs.Tail)];
 
 fun | drops 0 {xs} = {xs}
     | drops n {xs} = drops (n-1) (xs.Tail);
 
 fun maps {f} where
   | stream{xs}.Head = f(xs.Head)
-	| stream{xs}.Tail = {stream(xs.Tail)};
+  | stream{xs}.Tail = {stream(xs.Tail)};
 
 fun | zips {xs} {ys} .Head = (xs.Head, ys.Head)
     | zips {xs} {ys} .Tail = {zips (xs.Tail) (ys.Tail)};
 
 fun zipsWith {f} where
   | combine {xs} {ys} .Head = f (xs.Head) (ys.Head)
-	| combine {xs} {ys} .Tail = {combine (xs.Tail) (ys.Tail)};
+  | combine {xs} {ys} .Tail = {combine (xs.Tail) (ys.Tail)};
 
 fun | appends Nil       {ys}      = ys
     | appends Cons[x,xs] ys .Head = x
@@ -43,21 +43,21 @@ fun | appends Nil       {ys}      = ys
 
 fun filterSwap {p} where
   | go filter {xs} to Head[{this}], that
-	  = go xs.Head to {this}
-	| go filter {xs} to Tail[{this}], that = {
-	  val {ys} = xs.Tail;
-		if | p(xs.Head) == p(ys.Head)
-		     => go filter {ys} to this, that
-			 | => go filter {ys} to that, this
-	};
+    = go xs.Head to {this}
+  | go filter {xs} to Tail[{this}], that = {
+    val {ys} = xs.Tail;
+    if | p(xs.Head) == p(ys.Head)
+         => go filter {ys} to this, that
+       | => go filter {ys} to that, this
+  };
 
 fun go prescientFilter {p} {xs} to {start}
   = go filterSwap {p} {xs} to start, start;
 
 
 val example = prescientFilter
-							  {fn | 2 => False
-								    | x => x < 5}
+                {fn | 2 => False
+                    | x => x < 5}
                 nats;
 
 # Uncomment example5 and example10 to see different answers

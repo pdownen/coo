@@ -128,6 +128,7 @@ data Type
   | UnitTy
   | Type `PairTy` Type
   | Type `ArrowTy` Type
+  | Type `ArrDoTy` Type
   | TagTy [(Literal, Type)]
   | ObjTy Type
   deriving (Show, Eq, Ord)

@@ -800,6 +800,7 @@ normalizePoleHead (s ::: t) = s ::: normalizeTypeHead t
 
 normalizeTypeHead :: Type -> Type
 normalizeTypeHead (s `ArrowTy` t) = s `PairTy` t
+normalizeTypeHead (s `ArrDoTy` t) = s `PairTy` (ObjTy t)
 normalizeTypeHead t               = t
 
 

@@ -354,6 +354,7 @@ desugarType (VarTy x)       = DC.VarTy $ External x
 desugarType UnitTy          = DC.UnitTy
 desugarType (s `PairTy` t)  = desugarType s `DC.PairTy` desugarType t
 desugarType (s `ArrowTy` t) = desugarType s `DC.PairTy` desugarType t
+desugarType (s `ArrDoTy` t) = desugarType s `DC.PairTy` (DC.ObjTy $ desugarType t)
 desugarType (TagTy xts)     = DC.TagTy $ M.fromList [ (x, desugarType t) | (x, t) <- xts ]
 desugarType (ObjTy t)       = DC.ObjTy $ desugarType t
 

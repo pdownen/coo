@@ -3,33 +3,33 @@ fun range x y = do => {
 	   |       => go Cons[x, range (x+1) y]
 };
 
-fun | take 0 _          = Nil
+fun | take 0 n          = Nil
     | take n Cons[x,xs] = Cons[x, take (n-1) xs];
 
 fun | drop 0 xs         = xs
     | drop n Cons[x,xs] = drop (n-1) xs
-    | drop _ Nil        = Nil;
+    | drop n Nil        = Nil;
 
 fun map {f} where
-  | _    Nil        = Nil
+  | loop Nil        = Nil
   | loop Cons[x,xs] = Cons[f x, loop xs];
 
 fun | zip Cons[x,xs] Cons[y,ys] = Cons[(x,y), zip xs ys]
-    | zip _          _          = Nil;
+    | zip xs         ys         = Nil;
 
 fun zipWith {f} where
   | zwf Cons[x,xs] Cons[y,ys] = Cons[f x y, zwf xs ys]
-  | zwf _          _          = Nil;
+  | zwf xs         ys         = Nil;
 
 fun filterPass {p}
-  | go fp Nil        to {_},    {same} = go to same
+  | go fp Nil        to {diff}, {same} = go to same
   | go fp Cons[x,xs] to {diff}, {same}
     if | p x = go fp xs
                to {do xs' => go Cons[x,xs'] to diff},
                   {same}
        |     = go fp xs
                to {diff},
-                  {do () => go xs to diff}
+                  {do () => go xs to diff};
 
 fun go filter {p} xs to {start} = {
     val () = filterPass {p} xs {start};

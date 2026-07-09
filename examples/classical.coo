@@ -1,9 +1,9 @@
-fun callcc {h} = do => go h {fn x to _ => go x};
+fun callcc {h} = do => go h {fn x to k' => go x};
 
-fun go c {h} to k = go h {fn {x} to _ => go x to k} to ();
+fun go c {h} to k = go h {fn {x} to k' => go x to k} to ();
 
 fun devil's_lem = do => {
-    fun go lie x to _ = go Yes[x];
+    fun go lie x to k' = go Yes[x];
     go No[{lie}]
 };
 

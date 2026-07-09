@@ -1,0 +1,251 @@
+# Selected examples with simple, monomorphic type signatures for checking/inference
+
+# Run this script with type checking on with the command
+# > coo examples/simple-types.coo --types=error
+# (or if you are running via `cabal`, you can pass the command-line arguments with)
+# > cabal run coo -- examples/simple-types.coo --type=error
+
+# Or enter the interactive interpreter and turn on type warnings with
+# > #type error
+# Then run and import this file with
+# > #run "examples/simple-types.coo"
+# You can then use these definitions to inspect the answers.  Or check the type of
+# any expression with
+# > #check expr
+
+###############################
+## Naturally Functional Code ##
+###############################
+
+fun dup : int -> {int, int};
+fun dup x = (x, x);
+
+# Note that `a ~> b` is shorthand for the common `a -> {b}`
+# You can read `a ~> b` as "run the code and return `b` after the `a` is passed"
+
+fun fst : (int, bool) ~> int;
+fun fst(x, y) = x;          # cannot be y
+#fun fst(x, y) = y;
+
+fun : (int, bool) ~> bool;  # Repeating the name in the signature is optional
+fun snd(x, y) = y;          # cannot be x
+#fun snd(x, y) = x;
+
+fun : int ~> int;
+fun negate n = 0 - n;
+
+fun abs : int ~> int;
+fun abs n if
+  | n < 0 = negate n
+  |       = n;
+
+val thirty = abs(10 * 3);
+val also_thirty = abs(10 * negate 3);
+
+fun fact : int ~> int;
+fun | fact(0) = 1
+    | fact(n) = n * fact(n-1);
+
+val one_hundred_twenty = fact 5;
+
+
+###########################
+## Shifting Code vs Data ##
+###########################
+
+fun not : bool ~> bool;
+fun | not True = False
+    | not _    = True;
+
+fun : bool -> bool ~> bool;
+fun and_eager x y if
+  | x = y
+  |   = False;
+
+fun : {{bool}} -> {{bool}} ~> bool;
+fun and_lazy {x} {y} if
+  | x = y
+  |   = False;
+
+# The arguments have the type {{bool}} because
+
+# * A `bool` argument means a *simplified boolean value*
+
+# * A `{bool}` argument would mean *a function/continuation taking a boolean
+#   input and no other return pointer or calling context for jumping back*
+
+# * A `{{bool}}` argument is a function that is called with no arguments other
+#   than a continuation `{bool}` expecting a boolean input (as above) which the
+#   function can use to return its simplified answer.
+
+val x = 10;
+val y = 100;
+val z = 0;
+
+val ten_under_twenty   = and_eager (not(x == 0)) (y / x < 20);
+#val errored_comparison = and_eager (not(z == 0)) (y / z < 20);  # divide-by-zero error
+val ten_under_twenty'  = and_lazy  {not(x == 0)} {y / x < 20};
+val error_averted      = and_lazy  {not(z == 0)} {y / z < 20};  # error averted
+
+
+########################
+## Sequential Control ##
+########################
+
+fun : int ~> int;
+fun collatz(n) = do => {
+    if (n%2 == 0) => go n/2;
+    go n*3 + 1;
+};
+
+fun : int ~> int;
+fun collatz_sequence(n) = do => {
+    if (n == 1) => go n;
+    pprint n;
+    go collatz_sequence(collatz(n));
+};
+
+# A long collatz sequence
+#val long_sequence = collatz_sequence(27);
+
+######################
+## Classical Axioms ##
+######################
+
+# Picking arbitrary monomorphic types for the schematic type variables
+# a = int
+# b = bool
+
+# fun callcc : {{a ~> b} ~> a} ~> a;
+fun callcc : {{int ~> bool} ~> int} ~> int;
+fun callcc {h} = do => go h {fn x to k => go x};
+
+val surprise1 = callcc{fn {k} => do => {
+    if | and_eager (k 1) (k 2) => go 3
+       |                       => go 4;
+    go 5;
+}};
+
+val surprise2 = callcc{fn {k} => do => {
+    if | and_lazy {k 1} {k 2} => go 3
+       |                      => go 4;
+    go 5;
+}};
+
+# To interpret excluded middle, `{a}` is logically equivalent to `¬a`
+
+# fun devil's_lem : {[Yes: a | No: {a}]};
+fun devil's_lem : {[Yes: int | No: {int}]};
+fun devil's_lem = do => {
+    fun lie : int;
+    fun lie = do ans => go Yes[ans];
+    go No[{lie}];
+};
+
+val cross_branches = int :: do => {
+    match devil's_lem with
+    | No[{k}] => go 1 to k
+    | Yes[x]  => go x;
+    go 2;
+};
+
+# fun angel's_lem : a, {a};
+fun angel's_lem : int, {int};
+fun go angel's_lem to x, k = go x to k;
+
+val pass_through = angel's_lem 3;
+
+
+# fun yield : a, {a, {b}} -> {b};
+fun yield : int, {int, {bool}} -> {bool};
+fun go yield x cxt to k = go (x, k) to cxt;
+
+
+#####################
+## Recursive Match ##
+#####################
+
+fun : int -> {};
+fun print_evens_until n = do => {
+  match 0 as continue with i
+  if | i == n => {}
+     | => { pprint i;
+            go i+2 to continue;
+          };
+  go;
+};
+
+fun : int ~> int;
+fun fib(n) = do => {
+  if (n < 0) => go n;
+  match (0, 1, n) : (int, int, int) as continue with
+  | now, later, 0 => go now
+  | now, later, n => go later, now+later, n-1 to continue;
+  go 0;
+};
+
+
+#########################
+## Assignment Handlers ##
+#########################
+
+fun : int -> int ~> [Nothing | Just: int];
+fun | safeDiv x 0 = Nothing
+    | safeDiv x y = Just[x/y];
+
+fun : int -> int ~> [Nothing | Just: int];
+fun undoDivide x y = do => {
+  val Just[a] = safeDiv x y
+      else Nothing => go Nothing;
+  pprint a;
+  val Just[b] = safeDiv x a
+      else Nothing => go Nothing;
+  pprint b;
+  go Just[b];
+};
+
+
+fun : int -> int -> {}, {int};
+fun go parDiv x y to {err}, {main} if
+  | y == 0 = go to err
+  |        = go x/y to main;
+
+fun : int -> int ~> [Nothing | Just: int];
+fun undoDivide' x y = do => {
+  fun err : ();
+  fun err = do () => go Nothing;
+
+  val a = parDiv x y {err};
+  pprint a;
+  val b = parDiv x a {err};
+  pprint b;
+  go Just[b];
+};
+
+
+#######################
+## Capturing Failure ##
+#######################
+
+fun fizzbuzz : int ~> string;
+fun fizzbuzz(n) if
+  | n%3 == 0 else other = concat "fizz" other
+  | n%5 == 0            = "buzz"
+  |                     = "";
+
+fun : int -> {};
+fun run_fizzbuzz(n) = do end => {
+  match 1 as continue with i => {
+    if (i > n) => go to end;
+    match fizzbuzz(i) with
+    | "" => { pprint i; }
+    | s  => { print s; };
+    go i+1 to continue;
+  };
+  go to end;
+};
+
+fun : int -> int -> int ~> (int, int);
+fun | divide2 a b else f of 0 => f 10
+    | divide2 a else f of 0 c => f 2 c
+    | divide2 a b c => (a/b, a/c);

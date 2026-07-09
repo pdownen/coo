@@ -42,18 +42,18 @@ print "";
 
 fun fizzbuzz n if
   | n%3 == 0 else other => concat "fizz" other
-	| n%5 == 0            => "buzz"
-	|                     => "";
+  | n%5 == 0            => "buzz"
+  |                     => "";
 
 print "Fizz Buzz";
 match 1 as continue with
   | 40 => { }
-	| n => {
-			match fizzbuzz n with
-			  | "" => { pprint n }
-				| s  => { print s };
-			go n+1 to continue;
-	  };
+  | n => {
+      match fizzbuzz n with
+        | "" => { pprint n }
+        | s  => { print s };
+      go n+1 to continue;
+    };
 
 print "";
 
