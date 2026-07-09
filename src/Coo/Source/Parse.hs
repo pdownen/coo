@@ -196,18 +196,11 @@ coterm = parseOpTable coreOpTable basicCoterm <?> "coterm"
 
 coreOpTable :: OperationTable Parser Term
 coreOpTable = [ leftward  $ postfixOp dotOp <> infixLOp appOp,
-                rightward $ infixROp (adhocBinOp "^"),
-                leftward
-                  $  infixLOp (adhocBinOp "*")
-                  <> infixLOp (adhocBinOp "/")
-                  <> infixLOp (adhocBinOp "%"),
-                leftward  $ infixLOp (adhocBinOp "+") <> infixLOp (adhocBinOp "-"),
-                leftward
-                  $  infixLOp (adhocBinOp "<")
-                  <> infixLOp (adhocBinOp ">")
-                  <> infixLOp (adhocBinOp "=<")
-                  <> infixLOp (adhocBinOp ">="),
-                leftward  $ infixLOp (adhocBinOp "==") <> infixLOp (adhocBinOp "/="),
+                rightward $ infixROp (adhocBinOps ["^", "^~"]),
+                leftward  $  infixLOp (adhocBinOps ["*", "*~", "/", "/~", "%"]),
+                leftward  $ infixLOp (adhocBinOps ["+", "+~", "-", "-~"]),
+                leftward  $  infixLOp (adhocBinOps ["<", "<~", ">", ">~", "=<~", ">=~"]),
+                leftward  $ infixLOp (adhocBinOps ["==", "==~", "/=", "/=~"]),
                 rightward $ prefixOp evalOp <> infixROp callOp,
                 rightward $ infixROp pairOp,
                 rightward $ prefixOp prefixTypeCast,
@@ -238,6 +231,9 @@ adhocBinOp :: String -> Parser (Term -> Term -> Term)
 adhocBinOp name = do
   ks name
   return $ \x y -> (Var (Bound $ Txt.pack name) `App` x) `App` y
+
+adhocBinOps :: [String] -> Parser (Term -> Term -> Term)
+adhocBinOps names = choice $ adhocBinOp <$> names
 
 -- Parsing (Co)Patterns
 

@@ -835,12 +835,27 @@ primOpTable = [ (equalityOp,     binaryIntCompareTy),
                 (lessEqualOp,    binaryIntCompareTy),
                 (greaterEqualOp, binaryIntCompareTy),
                 
+                (equalityFltOp,     binaryFltCompareTy),
+                (notEqualityFltOp,  binaryFltCompareTy),
+                (lessThanFltOp,     binaryFltCompareTy),
+                (greaterThanFltOp,  binaryFltCompareTy),
+                (lessEqualFltOp,    binaryFltCompareTy),
+                (greaterEqualFltOp, binaryFltCompareTy),
+
                 (plusOp,     binaryIntOpTy),
                 (minusOp,    binaryIntOpTy),
                 (timesOp,    binaryIntOpTy),
                 (divideOp,   binaryIntOpTy),
                 (moduloOp,   binaryIntOpTy),
                 (exponentOp, binaryIntOpTy),
+
+                (plusFltOp,     binaryFltOpTy),
+                (minusFltOp,    binaryFltOpTy),
+                (timesFltOp,    binaryFltOpTy),
+                (divideFltOp,   binaryFltOpTy),
+                (exponentFltOp, binaryFltOpTy),
+
+                (toFloatOp, S.IntTy `S.ArrowTy` S.ObjTy S.FloatTy),
 
                 (roundOp,   S.FloatTy `S.ArrowTy` S.ObjTy S.IntTy),
                 (ceilingOp, S.FloatTy `S.ArrowTy` S.ObjTy S.IntTy),
@@ -859,6 +874,7 @@ binaryIntOpTy = binaryFunTy S.IntTy S.IntTy S.IntTy
 binaryFltOpTy = binaryFunTy S.FloatTy S.FloatTy S.FloatTy
 binaryStrOpTy = binaryFunTy S.StringTy S.StringTy S.StringTy
 binaryIntCompareTy = binaryFunTy S.IntTy S.IntTy S.BoolTy
+binaryFltCompareTy = binaryFunTy S.FloatTy S.FloatTy S.BoolTy
 
 
 unaryNumOp :: String
@@ -1006,6 +1022,30 @@ exponentOp = binaryNumOp "^"
   (onBinaryLit S.Flt (\x y -> fromInteger x ** y))
   (onBinaryLit S.Flt (**))
 
+toFloatOp :: OpIO
+toFloatOp = POp {
+  opName = Txt.pack "float",
+  applyOp = \o v@(Struc p) -> case p of
+      (S.Int n :@: MT) :*: C k
+        -> sendToCls o (onUnaryLit S.Flt fromInteger n) k
+      num@(S.Flt _ :@: MT) :*: C k
+        -> sendToCls o (Struc num) k
+      _ -> throwError $ RuntimeErr $ UnhandledPrimArg "float" expected v
+        where expected = [(AnyNum :@: MT) :*: C ()]
+  }
+
+renameFloatOp :: OpIO -> OpIO
+renameFloatOp op = op{opName = opName op <> Txt.pack "~"}
+
+[ equalityFltOp, notEqualityFltOp,
+  lessThanFltOp, greaterThanFltOp, lessEqualFltOp, greaterEqualFltOp,
+  plusFltOp, minusFltOp, timesFltOp, divideFltOp, exponentFltOp ]
+  = renameFloatOp <$>
+    [ equalityOp, notEqualityOp,
+      lessThanOp, greaterThanOp, lessEqualOp, greaterEqualOp,
+      plusOp, minusOp, timesOp, divideOp, exponentOp ]
+
+
 roundOp :: OpIO
 roundOp = unaryNumOp "round" (onUnaryLit S.Int id) (onUnaryLit S.Int round)
 
@@ -1014,6 +1054,7 @@ ceilingOp = unaryNumOp "ceiling" (onUnaryLit S.Int id) (onUnaryLit S.Int ceiling
 
 floorOp :: OpIO
 floorOp = unaryNumOp "floor" (onUnaryLit S.Int id) (onUnaryLit S.Int floor)
+
 
 strConcatOp :: OpIO
 strConcatOp = POp {
