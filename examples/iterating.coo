@@ -1,0 +1,101 @@
+fun range(x, y) where
+  | self.Lower      = x
+  | self.Upper      = y
+	| self.Done       = x > y
+  | self.Step{make} = make{range(x+1, y)};
+
+fun ten20 = range(10, 20);
+
+fun sizing{obj} where
+  | self.Size = self.Upper - self.Lower + 1
+  | self      = obj;
+
+print "Size";
+pprint ! sizing{ten20}.Size;
+
+print "";
+
+
+fun collecting{obj} where
+  | self.Collect{f} if self.Done = Nil
+  | self.Collect{f} = Cons[f(self.Lower),self.Step{collecting}.Collect{f}]
+  | self = obj;
+
+print "Squares";
+pprint ! collecting{ten20}.Collect{fn x => x*x};
+
+print "";
+
+
+fun iterating{obj} where
+  | self.Each{f} = do => {
+      if self.Done => go ();
+      f(self.Lower);
+      go self.Step{iterating}.Each{f};
+    }
+  | self = obj;
+
+print "Print";
+iterating{ten20}.Each{pprint};
+
+print "";
+
+
+fun go yield x {cxt} to k = go (x, k) to cxt;
+
+fun yielding{obj} where
+  | self.Compose{f} = do => {
+      if self.Done => go f.Done;
+      val {g} = yield (self.Lower) {f.Next};
+      go self.Step{yielding}.Compose{g};
+    }
+  | self = obj;
+
+fun state x {obj} = obj(x);
+
+print "Sum";
+pprint ! yielding{ten20}.Compose{
+  state 0 {fn as
+    | self(acc).Done = acc
+    | self(acc).Next(x) = do => {
+        pprint x;
+				val acc = acc+x;
+        go {self(acc)}
+      }
+  }
+};
+
+print "";
+
+
+print "Fizz Buzz";
+
+fun fizzbuzz n if
+  | n%3 == 0 else other => concat "fizz" other
+	| n%5 == 0            => "buzz"
+	|                     => "";
+
+match 10 as continue with
+  | 20 => { }
+	| n => {
+			match fizzbuzz n with
+			  | "" => { pprint n }
+				| s  => { print s };
+			go n+1 to continue;
+	  };
+
+print "";
+
+
+print "Product";
+
+fun go product xs to end = {
+  val n = do => match (1, xs) as continue with
+	  | acc, Nil         => go acc
+		| acc, Cons[0,xs'] => go 0 to end
+		| acc, Cons[x,xs'] => go acc*x, xs' to continue;
+	go n to end;
+};
+
+pprint ! product ! collecting{range(1,5)}.Collect{fn x => x};
+pprint ! product ! collecting{ten20}.Collect{fn x => x};

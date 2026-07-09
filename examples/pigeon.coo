@@ -1,0 +1,102 @@
+fun return x  = x;
+fun force {x} = x;
+
+fun fst(x,_) = x;
+fun snd(_,y) = y;
+
+fun | go zeroes to Head[{k}] = go 0 to k
+    | go zeroes to Tail[{k}] = go {zeroes} to k;
+
+fun | always(x).Head = x
+    | always(x).Tail = {always(x)};
+
+fun | count(n).Head = n
+    | count(n).Tail = {count(n+1)};
+
+val nats = {count 0};
+
+fun repeat {f} where
+  | from(x).Head = x
+  | from(x).Tail = {from(f x)};
+
+fun | takes 0 {xs} = Nil
+		| takes n {xs} = Cons[xs.Head, takes (n-1) (xs.Tail)];
+
+fun | drops 0 {xs} = {xs}
+    | drops n {xs} = drops (n-1) (xs.Tail);
+
+fun maps {f} where
+  | stream{xs}.Head = f(xs.Head)
+	| stream{xs}.Tail = {stream(xs.Tail)};
+
+fun | zips {xs} {ys} .Head = (xs.Head, ys.Head)
+    | zips {xs} {ys} .Tail = {zips (xs.Tail) (ys.Tail)};
+
+fun zipsWith {f} where
+  | combine {xs} {ys} .Head = f (xs.Head) (ys.Head)
+	| combine {xs} {ys} .Tail = {combine (xs.Tail) (ys.Tail)};
+
+fun | appends Nil       {ys}      = ys
+    | appends Cons[x,xs] ys .Head = x
+    | appends Cons[x,xs] ys .Tail = {appends xs ys};
+
+
+fun filterSwap {p} where
+  | go filter {xs} to Head[{this}], that
+	  = go xs.Head to {this}
+	| go filter {xs} to Tail[{this}], that = {
+	  val {ys} = xs.Tail;
+		if | p(xs.Head) == p(ys.Head)
+		     => go filter {ys} to this, that
+			 | => go filter {ys} to that, this
+	};
+
+fun go prescientFilter {p} {xs} to {start}
+  = go filterSwap {p} {xs} to start, start;
+
+
+val example = prescientFilter
+							  {fn | 2 => False
+								    | x => x < 5}
+                nats;
+
+# Uncomment example5 and example10 to see different answers
+
+val example1 = takes 1 example;
+val example3 = takes 3 example;
+val example4 = takes 4 example;
+val example5 = takes 5 example;
+val example9 = takes 9 example;
+
+print "example1:"; pprint example1;
+print "example3:"; pprint example3;
+print "example4:"; pprint example4;
+#print "example5:"; pprint example5;
+#print "example9:"; pprint example9;
+
+
+fun infinitePigeons bits = do => {
+  val decided = prescientFilter {snd} {zips nats bits};
+  go {maps {fst} decided};
+};
+
+fun test =
+    appends
+    Cons[True, Cons[True, Cons[False, Cons[True, Cons[True, Nil]]]]]
+    {always False};
+
+val pigeons = infinitePigeons {test};
+
+val pigeons1 = takes 1 pigeons;
+val pigeons3 = takes 3 pigeons;
+val pigeons4 = takes 4 pigeons;
+val pigeons5 = takes 5 pigeons;
+val pigeons9 = takes 9 pigeons;
+
+# Uncomment 5 pigeons and 10 pigeons to see different answers
+
+print "1 pigeon:";  pprint pigeons1;
+print "3 pigeons:"; pprint pigeons3;
+print "4 pigeons:"; pprint pigeons4;
+print "5 pigeons:"; pprint pigeons5;
+print "9 pigeons:"; pprint pigeons10;

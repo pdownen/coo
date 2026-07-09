@@ -22,15 +22,14 @@ fun zipWith {f} where
   | zwf _          _          = Nil;
 
 fun filterPass {p}
-  | go fp Nil        to {_}, {same} = go to same
-  | go fp Cons[x,xs] to {diff}, {same} = {
-    if | p x => go fp xs
-                to {do xs' => go Cons[x,xs'] to diff},
-                   {same}
-       |     => go fp xs
-                to {diff},
-                   {do () => go xs to diff}
-  };
+  | go fp Nil        to {_},    {same} = go to same
+  | go fp Cons[x,xs] to {diff}, {same}
+    if | p x = go fp xs
+               to {do xs' => go Cons[x,xs'] to diff},
+                  {same}
+       |     = go fp xs
+               to {diff},
+                  {do () => go xs to diff}
 
 fun go filter {p} xs to {start} = {
     val () = filterPass {p} xs {start};

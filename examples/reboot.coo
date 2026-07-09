@@ -1,0 +1,93 @@
+# 0>
+val x, {reboot} = do {k} => go 0, {k} to k;
+
+# x <= 0;
+# reboot => (0> val x, {reboot} = □);
+# a <= "a";
+# 1>
+pprint x;
+
+# x <= 0;
+# reboot => (0> val x, {reboot} = □);
+# 2>
+val a = "a";
+
+# x <= 0;
+# reboot => (0> val x, {reboot} = □);
+# a <= "a";
+# 3>
+pprint a;
+
+# x <= 0;
+# reboot => (0> val x, {reboot} = □);
+# a <= "a";
+# 4>
+print "reboot 1"; reboot 1;
+
+# x <= 1;
+# reboot => (x <= 0; reboot => (0> val x, {reboot} = □); a <= "a"; 4> □);
+# 1>
+pprint x;
+
+pprint a;  # a is out of scope in repl
+
+# x <= 1;
+# reboot => (x <= 0; reboot => (0> val x, {reboot} = □); a <= "a"; 4> □);
+# 2>
+val b = "b";
+
+# x <= 1;
+# reboot => (x <= 0; reboot => (0> val x, {reboot} = □); a <= "a"; 4> □);
+# b <= "b";
+# 3>
+pprint b;
+
+# x <= 1;
+# reboot => (x <= 0; reboot => (0> val x, {reboot} = □); a <= "a"; 4> □);
+# b <= "b";
+# 4>
+print "reboot 2"; reboot 2;
+
+# x <= 0;
+# reboot => (0> val x, {reboot} = □);
+# a <= "a";
+# 5>
+pprint x;
+
+# x <= 0;
+# reboot => (0> val x, {reboot} = □);
+# a <= "a";
+# 6>
+pprint a;
+
+pprint b;  # b is out of scope in repl
+
+# x <= 0;
+# reboot => (0> val x, {reboot} = □);
+# a <= "a";
+# 7>
+val c = "c";
+
+# x <= 0;
+# reboot => (0> val x, {reboot} = □);
+# a <= "a";
+# 8>
+pprint c;
+
+# x <= 0;
+# reboot => (0> val x, {reboot} = □);
+# a <= "a";
+# c <= "c";
+# 8>
+print "reboot 3"; reboot 3;
+
+# x <= 3;
+# reboot => (x <= 0; reboot => (0> val x, {reboot} = □); a <= "a"; c = "c");
+# 1>
+pprint x;
+
+pprint a;  # a is out of scope in repl
+
+pprint b;  # b is out of scope in repl
+
+pprint c;  # c is out of scope in repl

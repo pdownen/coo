@@ -1,0 +1,21 @@
+fun go yield x there to here = go x, here to there;
+
+fun one_two_three_const cxt = do => {
+    val x = yield 1 cxt;
+    val y = yield 2 cxt;
+    val z = yield 3 cxt;
+    go (x, y, z)
+};
+
+pprint (one_two_three_const {fn x => x*x});
+
+fun go block {f} to x, {ret} = go f(x), {block {f}} to ret;
+
+fun one_two_three_seq cxt = do => {
+    val x, cxt1 = yield 1 cxt;
+    val y, cxt2 = yield 2 cxt1;
+    val z, cxt3 = yield 3 cxt2;
+    go (x, y, z)
+};
+
+pprint (one_two_three_seq {block {fn x => x*x}});

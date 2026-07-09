@@ -1,0 +1,69 @@
+fun | safeDiv x 0 = Nothing
+    | safeDiv x y = Just[x/y];
+
+fun undoDivide x y = do => {
+    val Just[a] = safeDiv x y
+        else Nothing => go Nothing;
+    pprint a;
+    val Just[b] = safeDiv x a
+        else Nothing => go Nothing;
+    pprint b;
+    go Just[b];
+};
+
+print "Pattern bind handlers";
+pprint(undoDivide 20 10);
+pprint(undoDivide 10 20);
+pprint(undoDivide 1 0);
+
+print "";
+
+
+fun go parDiv x y to {err}, {main} if
+  | y == 0 = go to err
+  |        = go x/y to main;
+
+fun undoDivide' x y = do => {
+    fun err = do () => go Nothing;
+    val a = parDiv x y {err};
+    pprint a;
+    val b = parDiv x a {err};
+    pprint b;
+    go Just[b];
+};
+
+print "Parallel error continuation path";
+pprint(undoDivide' 20 10);
+pprint(undoDivide' 10 20);
+pprint(undoDivide' 1 0);
+
+print "";
+
+
+fun fizzbuzz n if
+  | n%3 == 0 else other => concat "fizz" other
+	| n%5 == 0            => "buzz"
+	|                     => "";
+
+print "Fizz Buzz";
+match 1 as continue with
+  | 40 => { }
+	| n => {
+			match fizzbuzz n with
+			  | "" => { pprint n }
+				| s  => { print s };
+			go n+1 to continue;
+	  };
+
+print "";
+
+
+fun | divide2 a b else f of 0 => f 10
+    | divide2 a else f of 0 c => f 2 c
+    | divide2 a b c = (a/b, a/c);
+
+print "Double division handlers";
+pprint(divide2 100 5 20);
+pprint(divide2 100 5 0);
+pprint(divide2 100 0 20);
+pprint(divide2 100 0 0);

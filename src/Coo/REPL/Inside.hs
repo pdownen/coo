@@ -845,6 +845,9 @@ primOpTable = [ (equalityOp,     binaryIntCompareTy),
                 (ceilingOp, S.FloatTy `S.ArrowTy` S.ObjTy S.IntTy),
                 (floorOp,   S.FloatTy `S.ArrowTy` S.ObjTy S.IntTy),
 
+                (strConcatOp,
+                 S.StringTy `S.ArrowTy` (S.StringTy `S.ArrowTy` S.ObjTy S.StringTy)),
+
                 (printOp,  S.StringTy `S.ArrowTy` S.ObjTy S.UnitTy),
                 (pprintOp, S.IntTy `S.ArrowTy` S.ObjTy S.UnitTy),
 
@@ -1010,6 +1013,16 @@ ceilingOp = unaryNumOp "ceiling" (onUnaryLit S.Int id) (onUnaryLit S.Int ceiling
 
 floorOp :: OpIO
 floorOp = unaryNumOp "floor" (onUnaryLit S.Int id) (onUnaryLit S.Int floor)
+
+strConcatOp :: OpIO
+strConcatOp = POp {
+  opName = Txt.pack "concat",
+  applyOp = \o v@(Struc p) -> case p of
+      (S.Str s1 :@: MT) :*: ((S.Str s2 :@: MT) :*: C k)
+        -> sendToCls o (onBinaryLit S.Str (<>) s1 s2) k
+      _ -> throwError $ RuntimeErr $ UnhandledPrimArg "concat" expected v
+        where expected = [(AnyStr :@: MT) :*: ((AnyStr :@: MT) :*: C ())]
+  }
 
 printOp :: OpIO
 printOp = POp {
