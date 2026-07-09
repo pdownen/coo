@@ -353,10 +353,11 @@ replTop = replTopWith defaultOptions initCmd
 replTopWith :: ReplOptions -> ExecCmd -> IO r
 replTopWith opt cmd = do
   globr <- newIORef initGlob
-  rsr <- newIORef initRS{replOptions = opt}
+  let startRS = initRS{replOptions = opt}
+  rsr <- newIORef startRS
   hsr <- newIORef emptyHistory
   let chk = Save globr rsr hsr
-  runPromptIO chk $ runReplIOinit $ replStart cmd
+  runPromptIO chk $ runReplT (replStart cmd) initGlob startRS
   forever (runPromptIO chk $ runReplIOinit $ replRestart cmd)
 
 replStart :: ExecCmd -> ReplIO ()
