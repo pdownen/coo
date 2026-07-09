@@ -65,8 +65,8 @@ val example = prescientFilter
 val example1 = takes 1 example;
 val example3 = takes 3 example;
 val example4 = takes 4 example;
-val example5 = takes 5 example;
-val example9 = takes 9 example;
+#val example5 = takes 5 example;
+#val example9 = takes 9 example;
 
 print "example1:"; pprint example1;
 print "example3:"; pprint example3;
@@ -90,13 +90,13 @@ val pigeons = infinitePigeons {test};
 val pigeons1 = takes 1 pigeons;
 val pigeons3 = takes 3 pigeons;
 val pigeons4 = takes 4 pigeons;
-val pigeons5 = takes 5 pigeons;
-val pigeons9 = takes 9 pigeons;
+#val pigeons5 = takes 5 pigeons;
+#val pigeons9 = takes 9 pigeons;
 
 # Uncomment 5 pigeons and 10 pigeons to see different answers
 
 print "1 pigeon:";  pprint pigeons1;
 print "3 pigeons:"; pprint pigeons3;
 print "4 pigeons:"; pprint pigeons4;
-print "5 pigeons:"; pprint pigeons5;
-print "9 pigeons:"; pprint pigeons10;
+#print "5 pigeons:"; pprint pigeons5;
+#print "9 pigeons:"; pprint pigeons9;
