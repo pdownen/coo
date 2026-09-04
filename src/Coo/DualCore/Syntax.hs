@@ -87,7 +87,7 @@ data Dir o = GoTo | ToGo | Infer | Check o
 
 data Type x i
   = VarTy x
---  | RecTy x (Type x i)
+  | RecTy x (Type x i)
   | UnitTy
   | Type x i `PairTy` Type x i
   | TagTy (M.Map i (Type x i))
@@ -250,7 +250,7 @@ mapVarBoundVal f (LetFun o c) = LetFun o (mapVarClsVal f c)
 
 freeTypeVars :: (Ord x) => Type x i -> M.Map x x
 freeTypeVars (VarTy x)      = M.singleton x x
--- freeTypeVars (RecTy x t)    = M.delete x $ freeTypeVars t
+freeTypeVars (RecTy x t)    = M.delete x $ freeTypeVars t
 freeTypeVars UnitTy         = M.empty
 freeTypeVars (s `PairTy` t) = freeTypeVars s <> freeTypeVars t
 freeTypeVars (TagTy xts)    = M.unions [ freeTypeVars t | (_, t) <- M.toList xts ]
@@ -261,10 +261,10 @@ renameTypeVars :: (Ord x) => M.Map x x -> Type x i -> Type x i
 renameTypeVars sub (VarTy x)      = case M.lookup x sub of
   Just y  -> VarTy y
   Nothing -> VarTy x
--- renameTypeVars sub (RecTy x t)
---   | M.null sub'                  = RecTy x t
---   | otherwise                    = RecTy x $ renameTypeVars sub' t
---   where sub' = M.delete x sub
+renameTypeVars sub (RecTy x t)
+   | M.null sub'                  = RecTy x t
+   | otherwise                    = RecTy x $ renameTypeVars sub' t
+   where sub' = M.delete x sub
 renameTypeVars _   UnitTy         = UnitTy
 renameTypeVars sub (s `PairTy` t) = renameTypeVars sub s `PairTy` renameTypeVars sub t
 renameTypeVars sub (TagTy zts)    = TagTy $ renameTypeVars sub <$> zts
@@ -276,7 +276,7 @@ openTypeEquality eq s t = case (s, t) of
   (VarTy x, VarTy y) -> case M.lookup x eq of
     Nothing -> False
     Just z  -> y == z
---  (RecTy x s', RecTy y t') -> openTypeEquality (M.insert x y eq) s' t'
+  (RecTy x s', RecTy y t') -> openTypeEquality (M.insert x y eq) s' t'
   (ObjTy s', ObjTy t') -> openTypeEquality eq s' t'
   (UnitTy, UnitTy) -> True
   (s1 `PairTy` s2, t1 `PairTy` t2) ->

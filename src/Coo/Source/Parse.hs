@@ -436,7 +436,7 @@ nonemptyType =  parseOpTable coreTyOpTable basicType
 
 basicType :: Parser Type
 basicType =  VarTy <$> variable
---         <|> RecTy <$> (rec_ *> variable <* equal) <*> nonemptyType
+         <|> RecTy <$> (rec_ *> variable <* equal) <*> nonemptyType
          <|> TagTy <$> brackets (tagType `sepBy` alt)
          <|> ObjTy <$> braces typ
          <|> parens typ

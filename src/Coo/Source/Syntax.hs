@@ -124,7 +124,7 @@ opStrat CBN = CBV
 
 data Type
   = VarTy Variable
---  | RecTy Variable Type
+  | RecTy Variable Type
   | UnitTy
   | Type `PairTy` Type
   | Type `ArrowTy` Type

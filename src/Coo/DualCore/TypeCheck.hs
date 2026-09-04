@@ -358,6 +358,7 @@ checkTypePat cod dat t p = do
                       Just p' -> bitraverse (uncurry cod) (uncurry dat) p'
                       Nothing -> throwError $ BadPrimTypePat pty (GenPat p)
         Nothing  -> throwError $ UnknownTypeVar x
+    (RecTy x r, _) -> checkTypePat cod dat (substRecTy x t' r) p
     _ ->
       throwError $ TypePatternMismatch t (GenPat p)
 
@@ -544,6 +545,22 @@ comparePoles (s1 ::: a1) (s2 ::: a2)
   | s1 /= s2  = return False
   | otherwise = compareTypes a1 a2
 
+-- Unfold a recursive type one level by substitution.
+--
+-- Invariant: Recursive types are (externally) closed; their body has only one
+-- free variable, which is the recursively bound free variable.  Therefore,
+-- naive substitution is sound.
+substRecTy :: (Eq x) => x -> Type x i -> Type x i -> Type x i
+substRecTy x r t0 = case t0 of
+  VarTy y
+    | x == y    -> r
+    | otherwise -> t0
+  UnitTy        -> UnitTy
+  s `PairTy` t  -> substRecTy x r s `PairTy` substRecTy x r t
+  TagTy its     -> TagTy (substRecTy x r <$> its)
+  ObjTy t       -> ObjTy (substRecTy x r t)
+  RecTy y u     -> RecTy y (substRecTy x r u)
+  SameTypeAs x  -> SameTypeAs x
 
 openUnionTy :: (Ord x, Ord i) => M.Map x x -> Type x i -> Type x i -> Maybe (Type x i)
 openUnionTy eq s t = case (s, t) of
@@ -552,8 +569,8 @@ openUnionTy eq s t = case (s, t) of
     if y == z
       then Just (VarTy z)
       else Nothing
-  -- (RecTy x s', RecTy y t') ->
-  --   RecTy y <$> openUnionTy (M.insert x y eq) s' t'
+  (RecTy x s', RecTy y t') ->
+     RecTy y <$> openUnionTy (M.insert x y eq) s' t'
   (ObjTy s', ObjTy t') ->
     ObjTy <$> openIntersectTy eq s' t'
   (UnitTy, UnitTy) ->
@@ -578,8 +595,8 @@ openIntersectTy eq s t = case (s, t) of
     if y == z
       then Just (VarTy z)
       else Nothing
-  -- (RecTy x s', RecTy y t') ->
-  --   RecTy y <$> openUnionTy (M.insert x y eq) s' t'
+  (RecTy x s', RecTy y t') ->
+     RecTy y <$> openUnionTy (M.insert x y eq) s' t'
   (ObjTy s', ObjTy t') ->
     ObjTy <$> openUnionTy eq s' t'
   (UnitTy, UnitTy) ->

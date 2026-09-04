@@ -350,7 +350,7 @@ desugarStrat CBN = DC.CBN
 
 desugarType :: Type -> CoreType
 desugarType (VarTy x)       = DC.VarTy $ External x
--- desugarType (RecTy x t)     = DC.RecTy (External x) $ desugarType t
+desugarType (RecTy x t)     = DC.RecTy (External x) $ desugarType t
 desugarType UnitTy          = DC.UnitTy
 desugarType (s `PairTy` t)  = desugarType s `DC.PairTy` desugarType t
 desugarType (s `ArrowTy` t) = desugarType s `DC.PairTy` desugarType t

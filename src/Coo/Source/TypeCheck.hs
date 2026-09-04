@@ -409,6 +409,9 @@ elaborateTerm mo t = case (mo, t) of
   (Just o, Do r) -> do
     r' <- checkTypeReact Whole o r
     return (Do r', o)
+  -- (Just (s ::: r@(RecTy x r')), _) -> do
+  --   (t', s' ::: _) <- elaborateTerm (Just (s ::: substRecTy x r r')) t
+  --   return (t', s' ::: r)
   (Just o, Nil) -> case normalizePoleHead o of
     (CBV ::: UnitTy) -> return (Nil, o)
     _                -> throwError $ MistypedIntro t "an empty tuple" o
@@ -717,6 +720,8 @@ checkTypePatBind t p = case (normalizeTypeHead t, p) of
     Just t_i -> do (p_i', env) <- checkTypePatBind t_i p_i
                    return (Made i p_i', env)
     Nothing  -> throwError $ UnhandledTagPat i p_i table
+  (RecTy x r, _)                   -> do
+    checkTypePatBind (substRecTy x t r) p
   _                                -> throwError $ MistypedPat p t
 
 inferTypeCoPatBind :: (MonadReader TyInEnv m, MonadError TypeError m)
@@ -801,8 +806,26 @@ normalizePoleHead (s ::: t) = s ::: normalizeTypeHead t
 normalizeTypeHead :: Type -> Type
 normalizeTypeHead (s `ArrowTy` t) = s `PairTy` t
 normalizeTypeHead (s `ArrDoTy` t) = s `PairTy` (ObjTy t)
+normalizeTypeHead t@(RecTy x r)   = normalizeTypeHead (substRecTy x t r)
 normalizeTypeHead t               = t
 
+-- Unfold a recursive type one level by substitution.
+--
+-- Invariant: Recursive types are (externally) closed; their body has only one
+-- free variable, which is the recursively bound free variable.  Therefore,
+-- naive substitution is sound.
+substRecTy :: Variable -> Type -> Type -> Type
+substRecTy x r t0 = case t0 of
+  VarTy y
+    | x == y    -> r
+    | otherwise -> t0
+  UnitTy        -> UnitTy
+  s `PairTy` t  -> substRecTy x r s `PairTy` substRecTy x r t
+  s `ArrowTy` t -> substRecTy x r s `ArrowTy` substRecTy x r t
+  s `ArrDoTy` t -> substRecTy x r s `ArrDoTy` substRecTy x r t
+  TagTy its     -> TagTy [ (i, substRecTy x r t) | (i, t) <- its ]
+  ObjTy t       -> ObjTy (substRecTy x r t)
+  RecTy y u     -> RecTy y (substRecTy x r u)
 
 partialUnionTy :: Type -> Type -> Maybe Type
 partialUnionTy s t = case (normalizeTypeHead s, normalizeTypeHead t) of

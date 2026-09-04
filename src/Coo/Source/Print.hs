@@ -206,7 +206,7 @@ prettyBasicTy t = case t of
   _         -> parens $ prettyComplexTy t
 
 prettyComplexTy t = case t of
---  RecTy x t   -> pretty "rec" <+> pretty x <+> equals <+> prettyComplexTy t
+  RecTy x t   -> pretty "rec" <+> pretty x <+> equals <+> prettyComplexTy t
   UnitTy      -> mempty
   PairTy s t  -> prettyBasicTy s <> comma <+> prettyComplexTy t
   ArrowTy s t -> prettyBasicTy s <+> pretty "->" <+> prettyComplexTy t
