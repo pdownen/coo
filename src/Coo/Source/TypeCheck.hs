@@ -241,7 +241,7 @@ instance Pretty TypeError where
   pretty (UnknownTypeVar x) = vsep
     [ pretty "The type variable" <+> pretty x <+> pretty "is not defined in this context." ]
   pretty (BadPrimTypeLit t i) = vsep
-    [ sep [ pretty "The literal vaue",
+    [ sep [ pretty "The literal value",
             pretty i,
             pretty "is not a member of the primitive type:",
             pretty t ] ]
