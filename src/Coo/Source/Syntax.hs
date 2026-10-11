@@ -2,10 +2,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ParallelListComp #-}
 module Coo.Source.Syntax where
 
-import Data.Text
+import Data.List (sortBy)
+import Data.Function (on)
+import Data.Text hiding (length)
 import Control.Applicative
+import qualified Data.Map as M
 
 type Variable = Text
 type TagName = Text
@@ -131,7 +135,10 @@ data Type
   | Type `ArrDoTy` Type
   | TagTy [(Literal, Type)]
   | ObjTy Type
-  deriving (Show, Eq, Ord)
+  deriving (Show, Ord)
+
+instance Eq Type where
+  s == t = openTypeEquality (freeTypeVars s) s t
 
 instance Semigroup Reaction where
   (<>) = Alt
@@ -281,3 +288,35 @@ strategizeCast s (PostfixType a) = PostfixType $ strategizeAnnote s (Just a)
 castAnnote :: TypeCast -> Annotation
 castAnnote (PrefixType a)  = a
 castAnnote (PostfixType a) = a
+
+desugarTopArrowTy :: Type -> Type
+desugarTopArrowTy (s `ArrowTy` t) = s `PairTy` t
+desugarTopArrowTy (s `ArrDoTy` t) = s `PairTy` (ObjTy t)
+desugarTopArrowTy t               = t
+
+freeTypeVars :: Type -> M.Map Variable Variable
+freeTypeVars (VarTy x)       = M.singleton x x
+freeTypeVars (RecTy x t)     = M.delete x $ freeTypeVars t
+freeTypeVars UnitTy          = M.empty
+freeTypeVars (s `PairTy`  t) = freeTypeVars s <> freeTypeVars t
+freeTypeVars (s `ArrowTy` t) = freeTypeVars s <> freeTypeVars t
+freeTypeVars (s `ArrDoTy` t) = freeTypeVars s <> freeTypeVars t
+freeTypeVars (TagTy xts)     = M.unions [ freeTypeVars t | (_, t) <- xts ]
+freeTypeVars (ObjTy t)       = freeTypeVars t
+
+openTypeEquality :: M.Map Variable Variable
+                 -> Type -> Type -> Bool
+openTypeEquality eq s t = case (desugarTopArrowTy s, desugarTopArrowTy t) of
+  (VarTy x, VarTy y) -> case M.lookup x eq of
+    Nothing -> False
+    Just  z -> y == z
+  (RecTy x s', RecTy y t') -> openTypeEquality (M.insert x y eq) s' t'
+  (ObjTy s', ObjTy t') -> openTypeEquality eq s' t'
+  (UnitTy, UnitTy) -> True
+  (s1 `PairTy` s2, t1 `PairTy` t2) ->
+    openTypeEquality eq s1 t1 && openTypeEquality eq s2 t2
+  (TagTy xss, TagTy yts) -> length xss == length yts &&
+    and [ x == y && openTypeEquality eq s' t'
+        | (x, s') <- sortBy (compare `on` fst) xss
+        | (y, t') <- sortBy (compare `on` fst) yts ]
+  (_, _) -> False
