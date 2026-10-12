@@ -1,0 +1,42 @@
+--- Parsed source code ---
+pprint Cons["a", Cons["b", Cons["c", Nil]]]
+--------------------------
+--- Polarized source code ---
+⇓ pprint Cons["a", Cons["b", Cons["c", Nil]]]
+-----------------------------
+--- Simplified source code ---
+⇓ pprint Cons["a", Cons["b", Cons["c", Nil]]]
+------------------------------
+--- Desugared Dual Core command ---
+go do \here => go do \here => go pprint
+                              as (CBN, ⇒)
+                              to ‹‹Cons[‹‹"a"[‹›]›, ‹Cons[‹‹"b"[‹›]›,
+                                                           ‹Cons[‹‹"c"[‹›]›,
+                                                                  ‹Nil[‹›]››]››]››]›,
+                                  \here›
+               as (CBN, ⇒)
+               to ‹{\here}›
+as (CBV, ⇒)
+to \join
+-----------------------------------
+--- Executable Dual Core command ---
+go do \here => go do \here => go pprint
+                              as CBN
+                              to ‹‹Cons[‹‹"a"[‹›]›, ‹Cons[‹‹"b"[‹›]›,
+                                                           ‹Cons[‹‹"c"[‹›]›,
+                                                                  ‹Nil[‹›]››]››]››]›,
+                                  \here›
+               as CBN
+               to ‹{\here}›
+as CBV
+to \join
+------------------------------------
+--- Focused Dual Core command ---
+go do \here => go do \here => go pprint
+                              as CBN
+                              to «Cons["a", Cons["b", Cons["c", Nil]]], \here»
+               as CBN
+               to «{\here}»
+as CBV
+to \join
+-----------------------------------

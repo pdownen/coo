@@ -1,0 +1,68 @@
+A nonzero product:
+362880
+Is calculated as...
+multiplying by:
+1
+new accumulator:
+1
+multiplying by:
+2
+new accumulator:
+2
+multiplying by:
+3
+new accumulator:
+6
+multiplying by:
+4
+new accumulator:
+24
+multiplying by:
+5
+new accumulator:
+120
+multiplying by:
+6
+new accumulator:
+720
+multiplying by:
+7
+new accumulator:
+5040
+multiplying by:
+8
+new accumulator:
+40320
+multiplying by:
+9
+new accumulator:
+362880
+returning answer:
+362880
+Final answer is:
+362880
+
+A zero product:
+0
+Is calculated as
+multiplying by:
+1
+new accumulator:
+1
+multiplying by:
+2
+new accumulator:
+2
+multiplying by:
+3
+new accumulator:
+6
+multiplying by:
+4
+new accumulator:
+24
+multiplying by:
+5
+new accumulator:
+120
+0 found, skipping to end with answer 0

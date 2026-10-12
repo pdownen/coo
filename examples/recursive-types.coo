@@ -1,3 +1,4 @@
+# type List int = (rec lst = [Nil | Cons: int, lst])
 
 val fixed_list = Cons[1, Cons[2, Cons[3, Nil]]]
   : [Cons: int, [Cons: int, [Cons: int, [Nil]]]];
@@ -12,6 +13,8 @@ fun | sum Nil        = 0
 pprint(sum rec_list);
 #pprint(sum fixed_list);  # Recursive types aren't automatically folded
 
+
+# type Stream int = (rec strm = [Head: {int} } | Tail: strm])
 
 fun zeroes : rec strm = [Head: {int} | Tail: strm];
 fun | zeroes.Head = 0

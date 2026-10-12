@@ -47,7 +47,8 @@ import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Monad.Catch
 
-import System.Exit
+import System.Exit (exitSuccess, exitFailure)
+import System.IO (hPutStrLn, stderr)
 import System.Console.Haskeline
 import System.Console.Haskeline.History
 
@@ -118,6 +119,7 @@ data ReplState = RS { lineno      :: Int,
 
 data ReplOptions = RO { typeOption :: TypeCheckingOption,
                         batchOption :: Bool,
+                        showInternals :: InternalsOption,
                         stopAfterTypes :: Bool }
   deriving (Show, Eq)
 
@@ -314,6 +316,7 @@ desugarTyInEnv (S.TyIn ptys vars) = DC.TyIn ptys' vars'
 
 defaultOptions :: ReplOptions
 defaultOptions = RO { typeOption  = IgnoreTypes,
+                      showInternals = HideInternals,
                       batchOption = False,
                       stopAfterTypes = False }
 
@@ -345,7 +348,9 @@ runScript opts path = do
     DC.loop cmd
   case result of
     (Right (), _) -> return ()
-    (Left err, _) -> putDoc $ pretty err <> hardline
+    (Left err, _) -> do
+      hPutDoc stderr $ pretty err <> hardline
+      liftIO exitFailure
 
 replTop :: IO r
 replTop = replTopWith defaultOptions initCmd
@@ -378,7 +383,7 @@ replLoop cmd =
   (DC.loop cmd -- DC.loopBy printStep cmd
    `catchError`
    \err -> do
-     liftIO $ putDoc $ pretty err <> hardline
+     liftIO $ hPutDoc stderr $ pretty err <> hardline
      batch <- batchOption . replOptions <$> liftReplState get
      if batch
        then liftIO exitFailure
@@ -421,39 +426,45 @@ processCommand :: String -> String -> ReplIO ExecCmd
 processCommand place input = do
   rs <- liftReplState get
   sc <- replParse place input
-  -- liftIO $ putStrLn "--- Parsed source code ---"
-  -- liftIO $ putDoc $ pretty sc <> hardline
-  -- liftIO $ putStrLn "--------------------------"
   sp <- replPolar sc
-  -- liftIO $ putStrLn "--- Polarized source code ---"
-  -- liftIO $ putDoc $ pretty sp <> hardline
-  -- liftIO $ putStrLn "-----------------------------"
-  st <- typeCheckSource (typeOption $ replOptions rs) sp
-  -- liftIO $ putStrLn "--- Typed source code ---"
-  -- liftIO $ putDoc $ pretty st <> hardline
-  -- liftIO $ putStrLn "-------------------------"
+  let isTyped = typeOption $ replOptions rs
+  st <- typeCheckSource isTyped sp
   smp <- replSimplify st
-  -- liftIO $ putStrLn "--- Simplified source code ---"
-  -- liftIO $ putDoc $ pretty smp <> hardline
-  -- liftIO $ putStrLn "------------------------------"
   dc <- replTrans smp
-  -- liftIO $ putStrLn "--- Desugared Dual Core command ---"
-  -- liftIO $ putDoc $ pretty dc <> hardline
-  -- liftIO $ putStrLn "-----------------------------------"
-  dt <- typeCheckCore (typeOption $ replOptions rs) dc
-  -- liftIO $ putStrLn "--- Typed Dual Core command ---"
-  -- liftIO $ putDoc $ pretty (preCheckCore dt) <> hardline
-  -- liftIO $ putStrLn "-------------------------------"
+  dt <- typeCheckCore isTyped dc
   afterTypeCheck
   ec <- prepExec dt
-  -- liftIO $ putStrLn "--- Executable Dual Core command ---"
-  -- liftIO $ putDoc $ pretty ec <> hardline
-  -- liftIO $ putStrLn "------------------------------------"
   glob <- get
   let fc = runFocus (focusCmd ec) (focusing glob)
-  -- liftIO $ putStrLn "--- Focused Dual Core command ---"
-  -- liftIO $ putDoc $ pretty fc <> hardline
-  -- liftIO $ putStrLn "-----------------------------------"
+  onlyIf (showInternals (replOptions rs) == ShowInternals) $ do
+    liftIO $ putStrLn "--- Parsed source code ---"
+    liftIO $ putDoc $ pretty sc <> hardline
+    liftIO $ putStrLn "--------------------------"
+    liftIO $ putStrLn "--- Polarized source code ---"
+    liftIO $ putDoc $ pretty sp <> hardline
+    liftIO $ putStrLn "-----------------------------"
+    onlyIf (isTyped /= IgnoreTypes) $ do
+      liftIO $ putStrLn "--- Typed source code ---"
+      liftIO $ putDoc $ pretty st <> hardline
+      liftIO $ putStrLn "-------------------------"
+    liftIO $ putStrLn "--- Simplified source code ---"
+    liftIO $ putDoc $ pretty smp <> hardline
+    liftIO $ putStrLn "------------------------------"
+    liftIO $ putStrLn "--- Desugared Dual Core command ---"
+    liftIO $ putDoc $ pretty dc <> hardline
+    liftIO $ putStrLn "-----------------------------------"
+    onlyIf (isTyped /= IgnoreTypes) $ do
+      liftIO $ putStrLn "--- Typed Dual Core command ---"
+      liftIO $ putDoc $ pretty (preCheckCore dt) <> hardline
+      liftIO $ putStrLn "-------------------------------"
+    liftIO $ putStrLn "--- Executable Dual Core command ---"
+    liftIO $ putDoc $ pretty ec <> hardline
+    liftIO $ putStrLn "------------------------------------"
+    liftIO $ putStrLn "--- Focused Dual Core command ---"
+    liftIO $ putDoc $ pretty fc <> hardline
+    liftIO $ putStrLn "-----------------------------------"
+    onlyIf (batchOption $ replOptions rs) $ do
+      liftIO exitSuccess
   incrementLineno
   captureNextJoin
   return fc
@@ -463,10 +474,14 @@ data ReplAside = BeginMultiLine
                | ExecuteFile String
                | CheckTypeOfExpr String
                | SetTypeChecker TypeCheckingOption
+               | SetInternals InternalsOption
                | ReplHelp
   deriving (Show, Eq)
 
 data TypeCheckingOption = IgnoreTypes | TypeWarnings | TypeErrors
+  deriving (Show, Eq, Ord, Enum, Bounded)
+
+data InternalsOption = HideInternals | ShowInternals
   deriving (Show, Eq, Ord, Enum, Bounded)
 
 gatherInput :: Int -> ReplIO String
@@ -494,7 +509,7 @@ gatherMultiLineInput ln more = do
           gatherMultiLineInput ln more
         (Nothing, Right (ExecuteFile path)) -> liftIO $ readFile path
         (Just _,  Right (ExecuteFile _))    -> do
-          liftIO $ putStrLn "# cannot execute a file in the middle of multi-line input"
+          liftIO $ putStrLn "# cannot execute a file during multi-line input"
           gatherMultiLineInput ln more
         (_, Right (CheckTypeOfExpr str)) -> do
           checkTypeOfExpr str
@@ -509,7 +524,18 @@ gatherMultiLineInput ln more = do
           liftIO $ putStrLn msg
           return ""
         (Just _, Right (SetTypeChecker _)) -> do
-          liftIO $ putStrLn "# cannot change typing mode in the middle of multi-line input"
+          liftIO $ putStrLn "# cannot change typing mode during multi-line input"
+          gatherMultiLineInput ln more
+        (Nothing, Right (SetInternals mode)) -> do
+          liftReplState $ modify $ \rs ->
+            rs{replOptions = (replOptions rs){showInternals = mode}}
+          let msg = case mode of
+                      ShowInternals -> "# now showing internal compiler representations"
+                      HideInternals -> "# now hiding internal compiler representations"
+          liftIO $ putStrLn msg
+          return ""
+        (Just _, Right (SetInternals _)) -> do
+          liftIO $ putStrLn "# cannot change internal display mode during multi-line input"
           gatherMultiLineInput ln more
         (_, Right ReplHelp) -> do
           liftIO $ putStr helpMessage
@@ -526,12 +552,17 @@ replSideInstruction =  G.exact "{" *> pure BeginMultiLine
                    <|> G.exact "help" *> pure ReplHelp
                    <|> G.exact "type" *> (SetTypeChecker <$> typeCheckingOption)
                    <|> G.exact "check" *> (CheckTypeOfExpr <$> G.anything)
+                   <|> G.exact "core" *> (SetInternals <$> internalsOption)
                    <?> "repl side instruction (try asking for #!help)"
 
 typeCheckingOption :: G.Parser TypeCheckingOption
 typeCheckingOption =  G.exact "ignore" *> pure IgnoreTypes
                   <|> G.exact "warn" *> pure TypeWarnings
                   <|> G.exact "error" *> pure TypeErrors
+
+internalsOption :: G.Parser InternalsOption
+internalsOption =  G.exact "show" *> pure ShowInternals
+               <|> G.exact "hide" *> pure HideInternals
 
 checkTypeOfExpr :: String -> ReplIO (Maybe S.ElabPole)
 checkTypeOfExpr input = do
@@ -558,13 +589,14 @@ checkTypeOfExpr input = do
   where processPolarResult rs (Right t', _) = do
           processTypeResult rs $ S.runTypeCheck (S.inferTypeTerm t') (typeSource rs)
         processPolarResult _  (Left err, S.PolOut env) = do
-          liftIO $ putDoc $ pretty (SourcePolarityErr err) <> hardline
-          liftIO $ putStrLn "----------------------------------------"
+          liftIO $ hPutDoc stderr $ pretty (SourcePolarityErr err) <> hardline
+          liftIO $ hPutStrLn stderr "----------------------------------------"
           if M.null env
             then return ()
-            else liftIO $ putDoc $ vsep [ pretty "Constraints:",
-                                          indent 4 (pretty $ S.PolOut env),
-                                          mempty ]
+            else liftIO $ hPutDoc stderr $
+                 vsep [ pretty "Constraints:",
+                        indent 4 (pretty $ S.PolOut env),
+                        mempty ]
           return Nothing
 
         processTypeResult _ (Right (t', a), env) = do
@@ -574,17 +606,18 @@ checkTypeOfExpr input = do
           printConstraints env
           return $ Just a
         processTypeResult _ (Left err, env) = do
-          liftIO $ putDoc $ pretty (SourceTypeErr err) <> hardline
-          liftIO $ putStrLn "----------------------------------------"
+          liftIO $ hPutDoc stderr $ pretty (SourceTypeErr err) <> hardline
+          liftIO $ hPutStrLn stderr "----------------------------------------"
           printConstraints env
           return Nothing
 
         printConstraints (S.TyOut env)
           | M.null env = return ()
           | otherwise  = do
-              liftIO $ putDoc $ vsep [ pretty "Constraints:",
-                                       indent 4 (pretty $ S.TyOut env),
-                                       mempty ]
+              liftIO $ hPutDoc stderr $
+                vsep [ pretty "Constraints:",
+                       indent 4 (pretty $ S.TyOut env),
+                       mempty ]
 
 replParse :: (MonadError ReplError m) => String -> String -> m S.Command
 replParse place input = do
@@ -615,8 +648,8 @@ typeCheckSource opt c = do
     (Left err, _) -> do
       let tyerr = SourceTypeErr err
       case opt of
-        TypeWarnings -> do liftIO $ putDoc $ pretty tyerr <> hardline
-                           liftIO $ putStrLn "----------------------------------------"
+        TypeWarnings -> do liftIO $ hPutDoc stderr $ pretty tyerr <> hardline
+                           liftIO $ hPutStrLn stderr "----------------------------------------"
                            return c
         TypeErrors   -> throwError tyerr
 
@@ -647,8 +680,8 @@ typeCheckCore opt c = do
       | otherwise           -> handleTypeErr $ DualTypeErr $ UnboundConstraints $ TyOut env
     (Left err, _)           -> handleTypeErr $ DualTypeErr err
   where handleTypeErr err = case opt of
-          TypeWarnings -> do liftIO $ putDoc $ pretty err <> hardline
-                             liftIO $ putStrLn "----------------------------------------"
+          TypeWarnings -> do liftIO $ hPutDoc stderr $ pretty err <> hardline
+                             liftIO $ hPutStrLn stderr "----------------------------------------"
                              return c
           TypeErrors   -> throwError err
 
@@ -787,6 +820,10 @@ replHandlers = Extern
     illdefinedData = \x o c -> throwError $ RuntimeErr $ IlldefinedData x o c,
     illdefinedCode = \x o v -> throwError $ RuntimeErr $ IlldefinedCode x o v }
 
+onlyIf :: (Monad m) => Bool -> m () -> m ()
+onlyIf True  act = act
+onlyIf False _   = return ()
+
 -------------------------
 -- Specific Primitives --
 -------------------------
@@ -853,23 +890,26 @@ primOpTable = [ (equalityOp,     binaryIntCompareTy),
                 (minusFltOp,    binaryFltOpTy),
                 (timesFltOp,    binaryFltOpTy),
                 (divideFltOp,   binaryFltOpTy),
+                (moduloFltOp,   binaryFltOpTy),
                 (exponentFltOp, binaryFltOpTy),
 
-                (toFloatOp, S.IntTy `S.ArrowTy` S.ObjTy S.FloatTy),
+                (toFloatOp, S.IntTy `S.ArrDoTy` S.FloatTy),
 
-                (roundOp,   S.FloatTy `S.ArrowTy` S.ObjTy S.IntTy),
-                (ceilingOp, S.FloatTy `S.ArrowTy` S.ObjTy S.IntTy),
-                (floorOp,   S.FloatTy `S.ArrowTy` S.ObjTy S.IntTy),
+                (roundOp,   S.FloatTy `S.ArrDoTy` S.IntTy),
+                (ceilingOp, S.FloatTy `S.ArrDoTy` S.IntTy),
+                (floorOp,   S.FloatTy `S.ArrDoTy` S.IntTy),
 
                 (strConcatOp,
-                 S.StringTy `S.ArrowTy` (S.StringTy `S.ArrowTy` S.ObjTy S.StringTy)),
+                 S.StringTy `S.ArrowTy` (S.StringTy `S.ArrDoTy` S.StringTy)),
 
-                (printOp,  S.StringTy `S.ArrowTy` S.ObjTy S.UnitTy),
-                (pprintOp, S.IntTy `S.ArrowTy` S.ObjTy S.UnitTy),
+                (printOp,  S.StringTy `S.ArrDoTy` S.UnitTy),
+                (pprintOp, S.IntTy `S.ArrDoTy` S.UnitTy),
 
-                (runFileOp, S.StringTy `S.ArrowTy` S.ObjTy S.UnitTy) ]
+                (runFileOp, S.StringTy `S.ArrDoTy` S.UnitTy),
 
-binaryFunTy a b c = a `S.ArrowTy` (b `S.ArrowTy` S.ObjTy c)
+                (exitProgPOp, S.ObjTy S.UnitTy) ]
+
+binaryFunTy a b c = a `S.ArrowTy` (b `S.ArrDoTy` c)
 binaryIntOpTy = binaryFunTy S.IntTy S.IntTy S.IntTy
 binaryFltOpTy = binaryFunTy S.FloatTy S.FloatTy S.FloatTy
 binaryStrOpTy = binaryFunTy S.StringTy S.StringTy S.StringTy
@@ -1039,11 +1079,11 @@ renameFloatOp op = op{opName = opName op <> Txt.pack "~"}
 
 [ equalityFltOp, notEqualityFltOp,
   lessThanFltOp, greaterThanFltOp, lessEqualFltOp, greaterEqualFltOp,
-  plusFltOp, minusFltOp, timesFltOp, divideFltOp, exponentFltOp ]
+  plusFltOp, minusFltOp, timesFltOp, divideFltOp, moduloFltOp, exponentFltOp ]
   = renameFloatOp <$>
     [ equalityOp, notEqualityOp,
       lessThanOp, greaterThanOp, lessEqualOp, greaterEqualOp,
-      plusOp, minusOp, timesOp, divideOp, exponentOp ]
+      plusOp, minusOp, timesOp, divideOp, moduloOp, exponentOp ]
 
 
 roundOp :: OpIO
@@ -1179,6 +1219,7 @@ helpMessage = unlines
     "#run \"<path>\"               read from file <path> and run the command within",
     "#check <expression>         check the type of the given expression",
     "#type ignore|warn|error     set type checking mode",
+    "#core show|hide             display internal compiler information (like dual core)",
     "#help                       this help message",
     "Ctrl-c                      cancel the currently running command",
     "Ctrl-d                      exit the Coo interpreter" ]

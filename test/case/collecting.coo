@@ -1,0 +1,46 @@
+fun range : (int, int)
+         -> rec r
+          = [ Lower: {int}
+            | Upper: {int}
+            | Done:  {bool}
+            | Step:  {{r} -> r} -> r ];
+fun range(x, y) where
+  | self.Lower      = x
+  | self.Upper      = y
+  | self.Done       = x > y
+  | self.Step{make} = make{range(x+1, y)};
+
+# Note: collecting is not simply typed
+fun collecting{obj} where
+  | self.Collect{f} if self.Done = Nil
+  | self.Collect{f} = Cons[f(self.Lower),self.Step{collecting}.Collect{f}]
+  | self = obj;
+
+fun oneTen : rec r
+           = [ Lower:   {int}
+             | Upper:   {int}
+             | Done:    {bool}
+             | Collect: {int ~> int} ~> rec lst = [Nil | Cons: int, lst]
+             | Step:    {{r} -> r} -> r ];
+fun oneTen = collecting{range(1, 10)};
+
+fun print_list : (rec lst = [Nil | Cons: int, lst]) ~> ();
+fun | print_list Nil = ()
+    | print_list Cons[x,xs] = do => {
+        pprint x;
+        go print_list xs;
+      };
+
+print "Collecting the first 10 squares:";
+print_list ! oneTen.Collect{fn x => x*x};
+
+print "Inherited answers:";
+pprint ! oneTen.Lower;
+pprint ! oneTen.Upper;
+
+if | oneTen.Done
+     => { print "collecting{range(1,10)} is done" }
+   | => { print "collecting{range(1,10)} has a step" };
+
+pprint ! oneTen.Step{fn{r} => r}.Lower;
+

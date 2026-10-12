@@ -1,0 +1,8 @@
+fun inc : int -> int; # should be either int -> {int} or the shorthand int ~> int
+fun inc x = x+1;
+
+pprint(0);
+pprint(inc 0);
+pprint(inc(inc 0));
+pprint(inc(inc(inc 0)));
+pprint(inc(inc(inc(inc 0))));

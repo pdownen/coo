@@ -1,0 +1,68 @@
+fun go product xs to end = {
+  val n = do =>
+    match (1, xs) as continue with
+    | acc, Nil         => go acc
+    | acc, Cons[0,xs'] => go 0 to end
+    | acc, Cons[x,xs'] => go acc*x, xs' to continue;
+  go n to end;
+};
+
+val zero = Cons[1,
+           Cons[2,
+           Cons[3,
+           Cons[4,
+           Cons[5,
+           Cons[0,
+           Cons[6,
+           Cons[7,
+           Cons[8,
+           Cons[9,
+           Nil]]]]]]]]]];
+
+val nonzero = Cons[1,
+              Cons[2,
+              Cons[3,
+              Cons[4,
+              Cons[5,
+              Cons[6,
+              Cons[7,
+              Cons[8,
+              Cons[9,
+              Nil]]]]]]]]];
+
+fun go noisy_product xs to end = {
+  val n = do => match (1, xs) as continue with
+    | acc, Nil         => {
+        print "returning answer:";
+        pprint acc;
+        go acc;
+      }
+    | acc, Cons[0,xs'] => {
+        print "0 found, skipping to end with answer 0";
+        go 0 to end;
+      }
+    | acc, Cons[x,xs'] => {
+        print "multiplying by:";
+        pprint x;
+        val acc = acc*x;
+        print "new accumulator:";
+        pprint acc;
+        go acc, xs' to continue;
+      };
+  print "Final answer is:";
+  pprint n;
+  go n to end;
+};
+
+print "A nonzero product:";
+pprint ! product nonzero;
+print "Is calculated as...";
+noisy_product nonzero;
+
+print "";
+
+print "A zero product:";
+pprint ! product zero;
+print "Is calculated as";
+noisy_product zero;
+

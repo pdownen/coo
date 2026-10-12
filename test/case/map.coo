@@ -1,0 +1,31 @@
+fun sum : (rec lst = [Nil | Cons: int, lst]) -> {int};
+fun | sum Nil        = 0
+    | sum Cons[x,xs] = x + sum xs;
+
+fun range : int -> int ~> rec lst = [Nil | Cons: int, lst];
+fun range x y if
+  | x > y = Nil
+  |       = Cons[x, range (x+1) y];
+
+fun map : {int ~> int} -> (rec lst = [Nil | Cons: int, lst])
+        ~> rec lst = [Nil | Cons: int, lst];
+fun map {f} where
+  | loop Nil        = Nil
+  | loop Cons[x,xs] = Cons[f x, loop xs];
+
+fun double : int ~> int;
+fun double x = 2*x;
+
+val oneToTen = range 1 10;
+
+pprint ! sum ! map {fn x => x} oneToTen;
+pprint ! sum ! map {fn x => x+x} oneToTen;
+pprint ! sum ! map {double} oneToTen;
+pprint ! sum ! map {fn where
+                       | fact 0 => 1
+                       | fact n => n * fact(n-1)}
+                   Cons[5, Nil];
+pprint ! sum ! map {fn where
+                       | fact 0 => 1
+                       | fact n => n * fact(n-1)}
+                   oneToTen;

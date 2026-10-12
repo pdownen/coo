@@ -1,0 +1,27 @@
+Type Error: Mistyped use of variable: obj
+Expected: CBN
+:
+rec r = [ Lower : {int}
+| Upper : {int}
+| Size : {int}
+| Done : {bool}
+| Step : {{r} -> r} -> r ]
+Actual: CBN
+:
+rec r = [ Lower : {int}
+| Upper : {int}
+| Done : {bool}
+| Step : {{r} -> r} -> r ]
+----------------------------------------
+Type Error (internal): Variable obj used with the wrong type.
+Expected: CBN
+:
+rec r = [ Done : {bool}
+| Lower : {int}
+| Size : {int}
+| Step : {{r}, r}, r
+| Upper : {int} ]
+Actual: CBN
+:
+rec r = [ Done : {bool} | Lower : {int} | Step : {{r}, r}, r | Upper : {int} ]
+----------------------------------------

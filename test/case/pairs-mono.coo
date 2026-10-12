@@ -1,0 +1,39 @@
+fun dup : int -> {int, int};
+fun dup x = (x, x);
+
+fun dup2 : (int, int) -> {(int, int), (int, int)};
+fun dup2 x = (x, x);
+
+fun fst : (string, int) ~> string;
+fun fst(x, y) = x;
+
+fun fst2 : (int, int) ~> int;
+fun fst2(x, y) = x;
+
+fun fst2x2 : ((int, int), (int, int)) ~> (int, int);
+fun fst2x2(x, y) = x;
+
+fun snd : (string, int) ~> int;
+fun snd(x, y) = y;
+
+fun snd2 : (int, int) ~> int;
+fun snd2(x, y) = y;
+
+fun snd3 : (int, int, int) ~> (int, int);
+fun snd3(x, y) = y;
+
+fun snd4 : (int, int, int, int) ~> (int, int, int);
+fun snd4(x, y) = y;
+
+fun snd2x2 : ((int, int), (int, int)) ~> (int, int);
+fun snd2x2(x, y) = y;
+
+val a1 = ("a", 1) : (string, int);
+print (fst a1);
+pprint (snd a1);
+
+val twoByTwo = dup2(dup 4);
+
+pprint ! snd2 (fst2x2 twoByTwo);
+pprint ! fst2 (snd2x2 twoByTwo);
+pprint ! fst2 (snd3 (snd4 (1, 2, 3, 4)));

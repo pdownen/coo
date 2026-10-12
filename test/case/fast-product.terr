@@ -1,0 +1,23 @@
+Type Error: No type given for the function definition:
+    fun go product xs to end => val n = do => match 1, xs with
+                                              where continue | with (acc, Nil) => go acc
+                                                                                  as CBV : ⇒
+                                                             | with (acc, Cons[0, xs']) => go 0
+                                                                                           as CBV : ⇐
+                                                                                           to ↑ end
+                                                             | with (acc, Cons[x, xs']) => go (⇓ * acc x), xs'
+                                                                                           as CBV : ⇐
+                                                                                           to continue
+                                go n as CBV : ⇒ to ↑ end
+----------------------------------------
+Type Error (internal): Cannot infer the type of the term:
+    ‹Cons[‹‹1[‹›]›, ‹Cons[‹‹2[‹›]›, ‹Cons[‹‹3[‹›]›, ‹Cons[‹‹4[‹›]›,
+                                                           ‹Cons[‹‹5[‹›]›,
+                                                                  ‹Cons[‹‹0[‹›]›,
+                                                                         ‹Cons[‹‹6[‹›]›,
+                                                                                ‹Cons[‹‹7[‹›]›,
+                                                                                       ‹Cons[‹‹8[‹›]›,
+                                                                                              ‹Cons[‹‹9[‹›]›,
+                                                                                                     ‹Nil[‹›]››]››]››]››]››]››]››]››]››]››]›
+from its context. (Try giving it a type annotation.)
+----------------------------------------

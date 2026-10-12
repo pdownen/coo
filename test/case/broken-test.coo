@@ -1,0 +1,11 @@
+# Doesn't match the contents of the given expected output.
+print "The given answers to this test case are wrong!";
+
+fun expects_a_number : int ~> int;
+fun expects_a_number(n) = n;
+
+# A static type error that is okay when run without type checking.
+print ! expects_a_number("The function is given a string instead.");
+
+# No runtime exception is expected, but cause a divide-by-zero for good measure.
+1/0;

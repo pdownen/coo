@@ -1,0 +1,101 @@
+--- Parsed source code ---
+match 0 with
+where continue | with 100 => 
+               | with n => pprint n
+                           go + n 2 to continue
+--------------------------
+--- Polarized source code ---
+match 0 with
+where continue | with 100 => 
+               | with n => ⇓ pprint n
+                           go + n 2 as CBN : ⇒ to ↓ continue
+-----------------------------
+--- Simplified source code ---
+match 0 with
+| where go continue to 100 => 
+| where go continue to n => ⇓ pprint n
+                            go + n 2 as CBN : ⇒ to ↓ continue
+------------------------------
+--- Desugared Dual Core command ---
+go do \join => go do \other => go ‹0[‹›]›
+                               as (CBV, ⇒)
+                               to do {| continue to 100 =>
+                                          go «» as (CBV, ) to \join
+                                      | continue to n =>
+                                          go do \here => go do \here => go pprint
+                                                                        as ( CBN
+                                                                        , ⇒ )
+                                                                        to ‹n,
+                                                                            \here›
+                                                         as (CBN, ⇒)
+                                                         to ‹{\here}›
+                                          as (CBV, ⇒)
+                                          to do \_ => go do \here => go do \here => go +
+                                                                                    as ( CBN
+                                                                                    , ⇒ )
+                                                                                    to ‹n,
+                                                                                        \here›
+                                                                     as (CBN, ⇒)
+                                                                     to ‹‹2[‹›]›,
+                                                                         \here›
+                                                      as (CBN, ⇒)
+                                                      to ‹{continue}›}
+               as (CBV, )
+               to do \_ => go «» as (CBV, ) to \join
+as (CBV, )
+to do \_ => go «» as (CBV, ) to \join
+-----------------------------------
+--- Executable Dual Core command ---
+go do \join => go do \other => go ‹0[‹›]›
+                               as CBV
+                               to do {| continue to 100 =>
+                                          go «» as CBV to \join
+                                      | continue to n =>
+                                          go do \here => go do \here => go pprint
+                                                                        as CBN
+                                                                        to ‹n,
+                                                                            \here›
+                                                         as CBN
+                                                         to ‹{\here}›
+                                          as CBV
+                                          to do \_ => go do \here => go do \here => go +
+                                                                                    as CBN
+                                                                                    to ‹n,
+                                                                                        \here›
+                                                                     as CBN
+                                                                     to ‹‹2[‹›]›,
+                                                                         \here›
+                                                      as CBN
+                                                      to ‹{continue}›}
+               as CBV
+               to do \_ => go «» as CBV to \join
+as CBV
+to do \_ => go «» as CBV to \join
+------------------------------------
+--- Focused Dual Core command ---
+go do \join => go do \other => go «0»
+                               as CBV
+                               to do {| continue to 100 =>
+                                          go «» as CBV to \join
+                                      | continue to n =>
+                                          go do \here => go do \here => go pprint
+                                                                        as CBN
+                                                                        to «n,
+                                                                            \here»
+                                                         as CBN
+                                                         to «{\here}»
+                                          as CBV
+                                          to do \_ => go do \here => go do \here => go +
+                                                                                    as CBN
+                                                                                    to «n,
+                                                                                        \here»
+                                                                     as CBN
+                                                                     to «2,
+                                                                         \here»
+                                                      as CBN
+                                                      to «{continue}»}
+               as CBV
+               to do \_ => go «» as CBV to \join
+as CBV
+to do \_ => go «» as CBV to \join
+-----------------------------------

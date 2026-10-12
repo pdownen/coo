@@ -1,0 +1,49 @@
+fun range : (int, int)
+         -> rec r
+          = [ Lower: {int}
+            | Upper: {int}
+            | Done:  {bool}
+            | Step:  {{r} -> r} -> r ];
+fun range(x, y) where
+  | self.Lower      = x
+  | self.Upper      = y
+  | self.Done       = x > y
+  | self.Step{make} = make{range(x+1, y)};
+
+fun yield : int, {int, {int}} -> {int};
+fun go yield x {cxt} to k = go (x, k) to cxt;
+
+# Note: yielding is not simply typed
+fun yielding{obj} where
+  | self.Compose{f} = do => {
+      if self.Done => go f.Done;
+      val {g} = yield (self.Lower) {f.Next};
+      go self.Step{yielding}.Compose{g};
+    }
+  | self = obj;
+
+fun oneTen = yielding{range(1, 10)};
+
+fun state x {obj} = obj(x);
+
+print "Sum from 1 to 10:";
+pprint ! oneTen.Compose{
+  state 0 {fn as
+    | self(acc).Done = acc
+    | self(acc).Next(x) = do => {
+        pprint x;
+        val acc = acc+x;
+        go {self(acc)}
+      }
+  }
+};
+
+print "Inherited answers:";
+pprint ! oneTen.Lower;
+pprint ! oneTen.Upper;
+
+if | oneTen.Done
+     => { print "yielding{range(1,10)} is done" }
+   | => { print "yielding{range(1,10)} has a step" };
+
+pprint ! oneTen.Step{fn{r} => r}.Lower;

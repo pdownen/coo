@@ -1,0 +1,68 @@
+# Picking arbitrary monomorphic types for the schematic type variables
+# a = int
+# b = bool
+
+# fun callcc : {{a ~> b} ~> a} ~> a;
+fun callcc : {{int ~> bool} ~> int} ~> int;
+fun callcc {h} = do => go h {fn x to k => go x};
+
+fun : bool -> bool ~> bool;
+fun and_eager x y if
+  | x = y
+  |   = False;
+
+fun : {{bool}} -> {{bool}} ~> bool;
+fun and_lazy {x} {y} if
+  | x = y
+  |   = False;
+
+pprint ! callcc{fn {k} => do => {
+    if | and_eager (k 1) (k 2) => go 3
+       |                       => go 4;
+    go 5;
+}};
+
+pprint! callcc{fn {k} => do => {
+    if | and_lazy {k 5} {k 6} => go 7
+       |                      => go 8;
+    go 5;
+}};
+
+# To interpret excluded middle, `{a}` is logically equivalent to `¬a`
+
+# fun devil's_lem : {[Yes: a | No: {a}]};
+fun devil's_lem : {[Yes: int | No: {int}]};
+fun devil's_lem = do => {
+    fun lie : int;
+    fun lie = do ans => go Yes[ans];
+    go No[{lie}];
+};
+
+pprint ! do => {
+    match devil's_lem with
+    | No[{_}] => {}
+    | Yes[x]  => go x;
+    go 9;
+};
+
+pprint ! do => {
+    match devil's_lem with
+    | No[{k}] => go 10 to k
+    | Yes[x]  => go x;
+    go 11;
+};
+
+# fun angel's_lem : a, {a};
+fun angel's_lem : int, {int};
+fun go angel's_lem to x, k = go x to k;
+
+fun identity : int ~> int;
+fun identiy x = x;
+
+# angel's_lem = identity
+pprint(angel's_lem 12);
+pprint(identity 12);
+
+# fun yield : a, {a, {b}} -> {b};
+fun yield : int, {int, {bool}} -> {bool};
+fun go yield x cxt to k = go (x, k) to cxt;

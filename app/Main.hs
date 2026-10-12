@@ -11,7 +11,10 @@ main = do
   opts <- execParser cli
   let initOpts = RO{ typeOption = initTypeOption opts,
                      stopAfterTypes = checkOnly opts,
-                     batchOption = not $ isNothing $ scriptFile opts }
+                     batchOption = not $ isNothing $ scriptFile opts,
+                     showInternals = if dumpCore opts
+                                     then ShowInternals
+                                     else HideInternals }
   case scriptFile opts of
     Nothing   -> do putStrLn "Coo!    (feel free to ask for #help)"
                     replTopWith initOpts initCmd
@@ -21,7 +24,8 @@ main = do
 data CommandOptions = CmdOpt
   { scriptFile :: Maybe FilePath,
     initTypeOption :: TypeCheckingOption,
-    checkOnly :: Bool }
+    checkOnly :: Bool,
+    dumpCore :: Bool }
   deriving (Show, Eq)
 
 cli :: ParserInfo CommandOptions
@@ -36,7 +40,11 @@ cli = info
             "2. If FILE is given, interpret and run its contents, then exit." ]
 
 commandOptions :: Parser CommandOptions
-commandOptions = CmdOpt <$> optional cliScriptFile <*> cliTypeOpt <*> cliCheckOpt
+commandOptions =  CmdOpt
+              <$> optional cliScriptFile
+              <*> cliTypeOpt
+              <*> cliCheckOpt
+              <*> cliDumpOpt
 
 cliScriptFile :: Parser String
 cliScriptFile = argument str
@@ -60,3 +68,9 @@ cliCheckOpt = switch
             $  long "check"
             <> short 'c'
             <> help "only check types, do not run (implies --type=warn)"
+
+cliDumpOpt :: Parser Bool
+cliDumpOpt = switch
+           $ long "dumpdc"
+           <> short 'd'
+           <> help "dump internal Dual Core representations"

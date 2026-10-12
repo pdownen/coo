@@ -1,0 +1,124 @@
+# The naive filter function
+fun : {int ~> bool} -> (rec l = [Nil | Cons: int, l])
+   ~> rec l = [Nil | Cons: int, l];
+fun filter {p}
+  | loop Nil = Nil
+  | loop Cons[x,xs] if
+    | p x => Cons[x, loop xs]
+    |     => loop xs;
+
+# The parsimonious filter function
+fun : {int ~> bool} -> (rec l = [Nil | Cons: int, l])
+   -> {rec l = [Nil | Cons: int, l]}, {()};
+fun filterPass {p} where
+  | go fp Nil        to {diff}, {same} = go to same
+  | go fp Cons[x,xs] to {diff}, {same}
+    if | p x = go fp xs
+               to {do xs' => go Cons[x,xs'] to diff},
+                  {same}
+       |     = go fp xs
+               to {diff},
+                  {do () => go xs to diff};
+
+fun : {int ~> bool} -> (rec l = [Nil | Cons: int, l])
+   ~> rec l = [Nil | Cons: int, l];
+fun go parsimoniousFilter {p} xs to {start} = {
+    val () = filterPass {p} xs {start};
+    go xs to start
+};
+
+# A "noisy" version of parsimonious filter that prints its steps
+fun : {int ~> bool} -> (rec l = [Nil | Cons: int, l])
+   -> {rec l = [Nil | Cons: int, l]}, {()};
+fun noisyFilterPass {p} where
+  | go fp Nil        to {diff}, {same} = {
+       print "End of the list reached; no difference.";
+       go to same;
+    }
+  | go fp Cons[x,xs] to {diff}, {same} if
+    | p x = {
+          print "Keeping element";
+          pprint x;
+          go fp xs
+          to { do xs' => {
+                  print "Allocating a fresh Cons cell containing:";
+                  pprint x;
+                  go Cons[x,xs'] to diff;
+               }
+             },
+             {same};
+      }
+    | = { print "Skipping element";
+          pprint x;
+          go fp xs
+          to {diff},
+             { do () => {
+                  print "The rightmost skipped element is:";
+                  pprint x;
+                  print "Reallocating the rest of the list on top of it...";
+                  go xs to diff;
+               }
+             };
+      };
+
+fun : {int ~> bool} -> (rec l = [Nil | Cons: int, l])
+   ~> rec l = [Nil | Cons: int, l];
+fun go noisyParsimoniousFilter {p} xs to {start} = {
+    val () = noisyFilterPass {p} xs {start};
+    go xs to start
+};
+
+# Comparing the two different filter functions
+fun equalList : (rec lst = [Nil | Cons: int, lst])
+               , (rec lst = [Nil | Cons: int, lst])
+              ~> bool;
+fun | equalList Nil        Nil        = True
+    | equalList Cons[x,xs] Cons[y,ys] if
+      | x == y                        = equalList xs ys
+      |                               = False;
+
+fun printList : (rec lst = [Nil | Cons: int, lst]) ~> ();
+fun | printList Nil = ()
+    | printList Cons[x,xs] = do => {
+        pprint x;
+        go printList xs;
+      };
+
+fun checkFilters : ({int ~> bool}, rec l = [Nil | Cons: int, l]) ~> ();
+fun checkFilters(test, list) = do => {
+  val naive = filter test list;
+  val parsim = parsimoniousFilter test list;
+  if | equalList naive parsim => {
+         print "Both filters produce the same answer:";
+         printList parsim;
+       }
+     | => {
+         print "The filters produce different answers.";
+         print "The naive filter function gives:";
+         printList naive;
+         print "But the parsimonious filter function gives:";
+         printList parsim;
+       };
+  print "The parsimonious filter function is calculated like so...";
+  noisyParsimoniousFilter test list;
+  go;
+};
+
+fun range : int -> int ~> rec lst = [Nil | Cons: int, lst];
+fun range x y if
+  | x > y = Nil
+  |       = Cons[x, range (x+1) y];
+
+val one25 = range 1 50;
+
+print "***Skipping everything***";
+checkFilters({fn x => x < 0}, one25);
+print "***Keeping everything***";
+checkFilters({fn x => x > 0}, one25);
+print "***Skipping the first half of the list***";
+checkFilters({fn x => x > 25}, one25);
+print "***Skipping one element in the middle of the list***";
+checkFilters({fn x => x /= 25}, one25);
+print "***Keeping the even numbers***";
+checkFilters({fn x => x % 2 == 0}, one25);
+

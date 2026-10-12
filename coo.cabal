@@ -85,3 +85,9 @@ test-suite coo-test
 
     build-depends:    base ^>=4.22,
                       coo,
+                      QuickCheck ^>= 2.19.0.0,
+                      hspec ^>= 2.11.18,
+                      hspec-core ^>= 2.11.18,
+                      process ^>= 1.6.30.0,
+
+    build-tool-depends: coo:coo

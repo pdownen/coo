@@ -1,0 +1,10 @@
+fun fact : int ~> int;
+fun | fact(0) = 1
+    | fact(n) = n * fact(n-1);
+
+match 0 as continue with
+  n if
+  | n > 10 => {}
+  | => { pprint ! fact(n);
+         go n+1 to continue
+       };

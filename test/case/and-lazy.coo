@@ -1,0 +1,9 @@
+fun and_lazy : {{bool}} -> {{bool}} ~> bool;
+fun and_lazy {x} {y} if | x = y
+                        |   = False;
+
+val z = 0;
+
+if | and_lazy {z /= 0} {10/z > 2}
+     => { print "can't happen, because z = 0" }
+   | => { print "we skipped the 10/0" };

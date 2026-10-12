@@ -1,0 +1,13 @@
+fun repeat : {int ~> int}, int -> rec strm = [Head: {int} | Tail: strm];
+fun repeat {next} where
+  | from(x).Head = x
+  | from(x).Tail = from(next(x));
+
+fun prints : int -> {rec strm = [Head: {int} | Tail: strm]} ~> ();
+fun | prints 0 {_}  = ()
+    | prints n {xs} = do => {
+        pprint (xs.Head);
+        go prints (n-1) {xs.Tail};
+      };
+
+prints 50 {repeat {fn x => x+x} 1};

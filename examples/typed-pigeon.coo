@@ -1,3 +1,5 @@
+# type Stream a = (rec a = [Head: {int} | Tail: {s}])
+
 fun zeroes : rec s = [Head: {int} | Tail: {{s}}];
 fun | go zeroes to Head[{k}] = go 0 to k
     | go zeroes to Tail[{k}] = go {zeroes} to k;

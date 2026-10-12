@@ -1,0 +1,9 @@
+Type Error: Mistyped term:
+    + x 1
+Expected: CBN : int
+Actual: CBN : {int}
+----------------------------------------
+Type Error (internal): Variable \here used with the wrong type.
+Expected: CBV : {int}
+Actual: CBV : int
+----------------------------------------

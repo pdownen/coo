@@ -1,0 +1,22 @@
+fun even : int ~> bool;
+fun even(n) = n % 2 == 0;
+
+fun collatz : int ~> int;
+fun collatz(n) = do => {
+  if even(n) => go n / 2;
+  go n * 3 + 1;
+};
+
+
+match 0, 27 : int, int as continue with
+| i, 1 => {
+     pprint 1;
+     print "end of sequence reached after the following number of steps:";
+     pprint i;
+  }
+| i, n => {
+    pprint n;
+    val n = collatz(n);
+    val i = i+1;
+    go i, n to continue;
+  };

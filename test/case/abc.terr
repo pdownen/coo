@@ -1,0 +1,8 @@
+Type Error: Mistyped introduction of a tagged value in the term
+    Cons["a", Cons["b", Cons["c", Nil]]]
+which cannot have the expected type
+    CBV : int
+----------------------------------------
+Type Error (internal): The primitive type int is incompatible with the pattern:
+    Cons[...]
+----------------------------------------

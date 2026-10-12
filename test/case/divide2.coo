@@ -1,0 +1,16 @@
+fun : int -> int -> int ~> (int, int);
+fun | divide2 a b else f of 0 => f 10
+    | divide2 a else f of 0 c => f 2 c
+    | divide2 a b c => (a/b, a/c);
+
+fun print_answers : (int, int) ~> ();
+fun print_answers(x, y) = do => {
+    pprint x;
+    pprint y;
+    go;
+};
+
+print_answers ! divide2 100 5 20;
+print_answers ! divide2 100 5 0;
+print_answers ! divide2 100 0 20;
+print_answers ! divide2 100 0 0;

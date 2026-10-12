@@ -1,0 +1,6 @@
+match 0 as continue with
+| 100 => { }
+| n => {
+    pprint n;
+    go n + 2 to continue;
+  };

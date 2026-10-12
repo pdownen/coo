@@ -1,0 +1,27 @@
+fun range : (int, int)
+         -> rec r
+          = [ Lower: {int}
+            | Upper: {int}
+            | Done:  {bool}
+            | Step:  {{r} -> r} -> r ];
+fun range(x, y) where
+  | self.Lower      = x
+  | self.Upper      = y
+  | self.Done       = x > y
+  | self.Step{make} = make{range(x+1, y)};
+
+fun twentyThirty : rec r
+                 = [ Lower: {int}
+                   | Upper: {int}
+                   | Done:  {bool}
+                   | Step:  {{r} -> r} -> r ];
+fun twentyThirty = range(20,30);
+
+pprint ! twentyThirty.Lower;
+pprint ! twentyThirty.Upper;
+
+if | twentyThirty.Done
+     => { print "range(20,30) is done" }
+   | => { print "range(20,30) has a step" };
+
+pprint ! twentyThirty.Step{fn{r} => r}.Lower;

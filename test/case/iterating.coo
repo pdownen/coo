@@ -1,0 +1,35 @@
+fun range : (int, int)
+         -> rec r
+          = [ Lower: {int}
+            | Upper: {int}
+            | Done:  {bool}
+            | Step:  {{r} -> r} -> r ];
+fun range(x, y) where
+  | self.Lower      = x
+  | self.Upper      = y
+  | self.Done       = x > y
+  | self.Step{make} = make{range(x+1, y)};
+
+# Note: iterating is not simply typed
+fun iterating{obj} where
+  | self.Each{f} = do => {
+      if self.Done => go ();
+      f(self.Lower);
+      go self.Step{iterating}.Each{f};
+    }
+  | self = obj;
+
+fun ten20 = iterating{range(10, 20)};
+
+print "Printing from 10 to 20:";
+ten20.Each{ pprint };
+
+print "Inherited answers:";
+pprint ! ten20.Lower;
+pprint ! ten20.Upper;
+
+if | ten20.Done
+     => { print "iterating{range(10,20)} is done" }
+   | => { print "iterating{range(10,20)} has a step" };
+
+pprint ! ten20.Step{fn{r} => r}.Lower;

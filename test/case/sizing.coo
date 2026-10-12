@@ -1,0 +1,44 @@
+fun range : (int, int)
+         -> rec r
+          = [ Lower: {int}
+            | Upper: {int}
+            | Done:  {bool}
+            | Step:  {{r} -> r} -> r ];
+fun range(x, y) where
+  | self.Lower      = x
+  | self.Upper      = y
+  | self.Done       = x > y
+  | self.Step{make} = make{range(x+1, y)};
+
+fun sizing : { rec r
+             = [ Lower: {int}
+               | Upper: {int}
+               | Done:  {bool}
+               | Step:  {{r} -> r} -> r ] }
+           -> rec r
+            = [ Lower: {int}
+              | Upper: {int}
+              | Size:  {int}
+              | Done:  {bool}
+              | Step:  {{r} -> r} -> r ];
+fun sizing{obj} where
+  | self.Size = self.Upper - self.Lower + 1
+  | self      = obj; # Note: This case is not simply typed
+
+fun twentyThirty : rec r
+                 = [ Lower: {int}
+                   | Upper: {int}
+                   | Size:  {int}
+                   | Done:  {bool}
+                   | Step:  {{r} -> r} -> r ];
+fun twentyThirty = sizing{range(20,30)};
+
+pprint ! twentyThirty.Lower;
+pprint ! twentyThirty.Upper;
+pprint ! twentyThirty.Size;
+
+if | twentyThirty.Done
+     => { print "sizing{range(20,30)} is done" }
+   | => { print "sizing{range(20,30)} has a step" };
+
+pprint ! twentyThirty.Step{fn{r} => r}.Lower;

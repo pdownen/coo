@@ -1,0 +1,12 @@
+fun always: int -> rec strm = [Head: {int} | Tail: strm];
+fun | always(x).Head = x
+    | always(x).Tail = always(x);
+
+fun prints : int -> {rec strm = [Head: {int} | Tail: strm]} ~> ();
+fun | prints 0 {_}  = ()
+    | prints n {xs} = do => {
+        pprint (xs.Head);
+        go prints (n-1) {xs.Tail};
+      };
+
+prints 12 {always 9};

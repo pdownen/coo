@@ -1,0 +1,147 @@
+--- Parsed source code ---
+fun fst : (string, int) ~> string
+fun fst (x, y) => x
+fun snd : (string, int) ~> int
+fun snd (x, y) => x
+val a1 = ("a", 1) : string, int
+print ! fst a1
+pprint ! snd a1
+--------------------------
+--- Polarized source code ---
+fun fst : (string, int) ~> string
+fun fst (x, y) => ⇑ x
+fun snd : (string, int) ~> int
+fun snd (x, y) => ⇑ x
+val a1 = ("a", 1) : CBV : string, int
+⇓ print ! fst a1
+⇓ pprint ! snd a1
+-----------------------------
+--- Simplified source code ---
+fun fst : (string, int) ~> string
+fun go fst to ((x, y), {\here}) => go x as CBV : ⇐ to \here
+fun snd : (string, int) ~> int
+fun go snd to ((x, y), {\here}) => go x as CBV : ⇐ to \here
+val a1 = ("a", 1) : CBV : string, int
+⇓ print ! fst a1
+⇓ pprint ! snd a1
+------------------------------
+--- Desugared Dual Core command ---
+go do {| fst to (x, y), {\here} =>
+           go x as (CBV, ⇐) to \here}
+as (CBN, (string, int), {string})
+to do fst => go do {| snd to (x, y), {\here} =>
+                        go x as (CBV, ⇐) to \here}
+             as (CBN, (string, int), {int})
+             to do snd => go do \here => go ‹‹"a"[‹›]›, ‹1[‹›]››
+                                         as (CBV, string, int)
+                                         to \here
+                          as (CBV, ⇒)
+                          to do a1 => go do \here => go do \here => go print
+                                                                    as (CBN, ⇒)
+                                                                    to ‹do \here => go do \here => go fst
+                                                                                                   as ( CBN
+                                                                                                   , ⇒ )
+                                                                                                   to ‹a1,
+                                                                                                       \here›
+                                                                                    as ( CBN
+                                                                                    , ⇒ )
+                                                                                    to ‹{\here}›,
+                                                                        \here›
+                                                     as (CBN, ⇒)
+                                                     to ‹{\here}›
+                                      as (CBV, ⇒)
+                                      to do \_ => go do \here => go do \here => go pprint
+                                                                                as ( CBN
+                                                                                , ⇒ )
+                                                                                to ‹do \here => go do \here => go snd
+                                                                                                               as ( CBN
+                                                                                                               , ⇒ )
+                                                                                                               to ‹a1,
+                                                                                                                   \here›
+                                                                                                as ( CBN
+                                                                                                , ⇒ )
+                                                                                                to ‹{\here}›,
+                                                                                    \here›
+                                                                 as (CBN, ⇒)
+                                                                 to ‹{\here}›
+                                                  as (CBV, ⇒)
+                                                  to \join
+-----------------------------------
+--- Executable Dual Core command ---
+go do {| fst to (x, y), {\here} =>
+           go x as CBV to \here}
+as CBN
+to do fst => go do {| snd to (x, y), {\here} =>
+                        go x as CBV to \here}
+             as CBN
+             to do snd => go do \here => go ‹‹"a"[‹›]›, ‹1[‹›]›› as CBV to \here
+                          as CBV
+                          to do a1 => go do \here => go do \here => go print
+                                                                    as CBN
+                                                                    to ‹do \here => go do \here => go fst
+                                                                                                   as CBN
+                                                                                                   to ‹a1,
+                                                                                                       \here›
+                                                                                    as CBN
+                                                                                    to ‹{\here}›,
+                                                                        \here›
+                                                     as CBN
+                                                     to ‹{\here}›
+                                      as CBV
+                                      to do \_ => go do \here => go do \here => go pprint
+                                                                                as CBN
+                                                                                to ‹do \here => go do \here => go snd
+                                                                                                               as CBN
+                                                                                                               to ‹a1,
+                                                                                                                   \here›
+                                                                                                as CBN
+                                                                                                to ‹{\here}›,
+                                                                                    \here›
+                                                                 as CBN
+                                                                 to ‹{\here}›
+                                                  as CBV
+                                                  to \join
+------------------------------------
+--- Focused Dual Core command ---
+go do {| fst to (x, y), {\here} =>
+           go x as CBV to \here}
+as CBN
+to do fst => go do {| snd to (x, y), {\here} =>
+                        go x as CBV to \here}
+             as CBN
+             to do snd => go do \here => go «"a", 1» as CBV to \here
+                          as CBV
+                          to do a1 => go do \here => go do \here => go print
+                                                                    as CBN
+                                                                    to do \it => go do \here => go do \here => go fst
+                                                                                                               as CBN
+                                                                                                               to «a1,
+                                                                                                                   \here»
+                                                                                                as CBN
+                                                                                                to «{\here}»
+                                                                                 as CBV
+                                                                                 to do \temp0 => go \it
+                                                                                                 as CBN
+                                                                                                 to «\temp0,
+                                                                                                     \here»
+                                                     as CBN
+                                                     to «{\here}»
+                                      as CBV
+                                      to do \_ => go do \here => go do \here => go pprint
+                                                                                as CBN
+                                                                                to do \it => go do \here => go do \here => go snd
+                                                                                                                           as CBN
+                                                                                                                           to «a1,
+                                                                                                                               \here»
+                                                                                                            as CBN
+                                                                                                            to «{\here}»
+                                                                                             as CBV
+                                                                                             to do \temp0 => go \it
+                                                                                                             as CBN
+                                                                                                             to «\temp0,
+                                                                                                                 \here»
+                                                                 as CBN
+                                                                 to «{\here}»
+                                                  as CBV
+                                                  to \join
+-----------------------------------

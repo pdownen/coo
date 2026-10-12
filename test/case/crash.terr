@@ -1,0 +1,5 @@
+Type Error: The literal value 5 is not a member of the primitive type: string
+----------------------------------------
+Type Error (internal): The primitive type string is incompatible with the pattern:
+    5[...]
+----------------------------------------

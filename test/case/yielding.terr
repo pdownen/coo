@@ -1,0 +1,11 @@
+Type Error: No type given for the function definition:
+    fun yielding {obj} | self .Compose {f} => do => if ⇓ self .Done => go f .Done
+                                                                       as CBN : ⇒
+                                                    val {g} = ⇓ yield (⇓ self .Lower) {f .Next}
+                                                    go self .Step {yielding} .Compose {g}
+                                                    as CBN : ⇒
+                       | self => obj
+----------------------------------------
+Type Error (internal): Untyped variable oneTen cannot be inferred.
+(Try giving it a type annotation at its binding or use sites.)
+----------------------------------------

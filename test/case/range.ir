@@ -1,0 +1,504 @@
+--- Parsed source code ---
+fun range : (int, int) -> rec r = [ Lower : {int}
+| Upper : {int}
+| Done : {bool}
+| Step : {{r} -> r} -> r ]
+fun range (x, y) | self .Lower => x
+                 | self .Upper => y
+                 | self .Done => > x y
+                 | self .Step {make} => make {range (+ x 1, y)}
+fun twentyThirty : rec r = [ Lower : {int}
+| Upper : {int}
+| Done : {bool}
+| Step : {{r} -> r} -> r ]
+fun twentyThirty => range (20, 30)
+pprint ! twentyThirty .Lower
+pprint ! twentyThirty .Upper
+if | twentyThirty .Done => print "range(20,30) is done"
+   | => print "range(20,30) has a step"
+pprint ! twentyThirty .Step {fn {r} => r} .Lower
+--------------------------
+--- Polarized source code ---
+fun range : (int, int) -> rec r = [ Lower : {int}
+| Upper : {int}
+| Done : {bool}
+| Step : {{r} -> r} -> r ]
+fun range (x, y) | self .Lower => ⇑ x
+                 | self .Upper => ⇑ y
+                 | self .Done => > x y
+                 | self .Step {make} => make {range ((⇓ + x 1), y)}
+fun twentyThirty : rec r = [ Lower : {int}
+| Upper : {int}
+| Done : {bool}
+| Step : {{r} -> r} -> r ]
+fun twentyThirty => range (20, 30)
+⇓ pprint ! twentyThirty .Lower
+⇓ pprint ! twentyThirty .Upper
+if | ⇓ twentyThirty .Done => ⇓ print "range(20,30) is done"
+   | => ⇓ print "range(20,30) has a step"
+⇓ pprint ! twentyThirty .Step {fn {r} => r} .Lower
+-----------------------------
+--- Simplified source code ---
+fun range : (int, int) -> rec r = [ Lower : {int}
+| Upper : {int}
+| Done : {bool}
+| Step : {{r} -> r} -> r ]
+fun | go range to ((x, y), Lower[{\here}]) fun self => range (x, y)
+                                           => go x as CBV : ⇐ to \here
+    | go range to ((x, y), Upper[{\here}]) fun self => range (x, y)
+                                           => go y as CBV : ⇐ to \here
+    | range (x, y) .Done fun self => range (x, y)
+                         => > x y
+    | range (x, y) .Step {make} fun self => range (x, y)
+                                => make {range ((⇓ + x 1), y)}
+fun twentyThirty : rec r = [ Lower : {int}
+| Upper : {int}
+| Done : {bool}
+| Step : {{r} -> r} -> r ]
+fun twentyThirty => range (20, 30)
+⇓ pprint ! twentyThirty .Lower
+⇓ pprint ! twentyThirty .Upper
+if | ⇓ twentyThirty .Done => ⇓ print "range(20,30) is done"
+   | => ⇓ print "range(20,30) has a step"
+⇓ pprint ! twentyThirty .Step {fn where _ {r} => r} .Lower
+------------------------------
+--- Desugared Dual Core command ---
+go do {| range to (x, y), Lower[{\here}] =>
+           go do {| self to \here =>
+                      go range as (CBN, ⇒) to ‹‹x, y›, \here›}
+           as (CBN, ⇐)
+           to do self => go x as (CBV, ⇐) to \here
+       | range to (x, y), Upper[{\here}] =>
+           go do {| self to \here =>
+                      go range as (CBN, ⇒) to ‹‹x, y›, \here›}
+           as (CBN, ⇐)
+           to do self => go y as (CBV, ⇐) to \here
+       | range to (x, y), Done[\here] =>
+           go do {| self to \here =>
+                      go range as (CBN, ⇒) to ‹‹x, y›, \here›}
+           as (CBN, ⇐)
+           to do self => go do \here => go > as (CBN, ⇒) to ‹x, \here›
+                         as (CBN, ⇒)
+                         to ‹y, \here›
+       | range to (x, y), Step[{make}, \here] =>
+           go do {| self to \here =>
+                      go range as (CBN, ⇒) to ‹‹x, y›, \here›}
+           as (CBN, ⇐)
+           to do self => go make
+                         as (CBN, ⇒)
+                         to ‹‹{do \here => go range
+                                           as (CBN, ⇒)
+                                           to ‹‹do \here => go do \here => go do \here => go +
+                                                                                          as ( CBN
+                                                                                          , ⇒ )
+                                                                                          to ‹x,
+                                                                                              \here›
+                                                                           as ( CBN
+                                                                           , ⇒ )
+                                                                           to ‹‹1[‹›]›,
+                                                                               \here›
+                                                            as (CBN, ⇒)
+                                                            to ‹{\here}›, y›,
+                                               \here›}›, \here›}
+as ( CBN
+, (int, int), rec r = [ Done : {bool}
+| Lower : {int}
+| Step : {{r}, r}, r
+| Upper : {int} ] )
+to do range => go do {| twentyThirty to \here =>
+                          go range as (CBN, ⇒) to ‹‹‹20[‹›]›, ‹30[‹›]››, \here›}
+               as ( CBN
+               , rec r = [ Done : {bool}
+               | Lower : {int}
+               | Step : {{r}, r}, r
+               | Upper : {int} ] )
+               to do twentyThirty => go do \here => go do \here => go pprint
+                                                                   as (CBN, ⇒)
+                                                                   to ‹do \here => go do \here => go twentyThirty
+                                                                                                  as ( CBN
+                                                                                                  , ⇒ )
+                                                                                                  to ‹Lower[\here]›
+                                                                                   as ( CBN
+                                                                                   , ⇒ )
+                                                                                   to ‹{\here}›,
+                                                                       \here›
+                                                    as (CBN, ⇒)
+                                                    to ‹{\here}›
+                                     as (CBV, ⇒)
+                                     to do \_ => go do \here => go do \here => go pprint
+                                                                               as ( CBN
+                                                                               , ⇒ )
+                                                                               to ‹do \here => go do \here => go twentyThirty
+                                                                                                              as ( CBN
+                                                                                                              , ⇒ )
+                                                                                                              to ‹Upper[\here]›
+                                                                                               as ( CBN
+                                                                                               , ⇒ )
+                                                                                               to ‹{\here}›,
+                                                                                   \here›
+                                                                as (CBN, ⇒)
+                                                                to ‹{\here}›
+                                                 as (CBV, ⇒)
+                                                 to do \_ => go do \join => go do \other => go do \other => go do \here => go do \here => go twentyThirty
+                                                                                                                                          as ( CBN
+                                                                                                                                          , ⇒ )
+                                                                                                                                          to ‹Done[\here]›
+                                                                                                                           as ( CBN
+                                                                                                                           , ⇒ )
+                                                                                                                           to ‹{\here}›
+                                                                                                            as ( CBV
+                                                                                                            , ⇒ )
+                                                                                                            to do {| True =>
+                                                                                                                       go do \here => go do \here => go print
+                                                                                                                                                     as ( CBN
+                                                                                                                                                     , ⇒ )
+                                                                                                                                                     to ‹‹"range(20,30) is done"[‹›]›,
+                                                                                                                                                         \here›
+                                                                                                                                      as ( CBN
+                                                                                                                                      , ⇒ )
+                                                                                                                                      to ‹{\here}›
+                                                                                                                       as ( CBV
+                                                                                                                       , ⇒ )
+                                                                                                                       to do \_ => go «»
+                                                                                                                                   as ( CBV
+                                                                                                                                   ,  )
+                                                                                                                                   to \join
+                                                                                                                   | \_ =>
+                                                                                                                       go «»
+                                                                                                                       as ( CBV
+                                                                                                                       ,  )
+                                                                                                                       to \other}
+                                                                                            as ( CBV
+                                                                                            , typeof(\other) )
+                                                                                            to do \_ => go do \other => go do \here => go do \here => go print
+                                                                                                                                                      as ( CBN
+                                                                                                                                                      , ⇒ )
+                                                                                                                                                      to ‹‹"range(20,30) has a step"[‹›]›,
+                                                                                                                                                          \here›
+                                                                                                                                       as ( CBN
+                                                                                                                                       , ⇒ )
+                                                                                                                                       to ‹{\here}›
+                                                                                                                        as ( CBV
+                                                                                                                        , ⇒ )
+                                                                                                                        to do \_ => go «»
+                                                                                                                                    as ( CBV
+                                                                                                                                    ,  )
+                                                                                                                                    to \join
+                                                                                                        as ( CBV
+                                                                                                        , typeof(\other) )
+                                                                                                        to do \_ => go «»
+                                                                                                                    as ( CBV
+                                                                                                                    ,  )
+                                                                                                                    to \other
+                                                                            as ( CBV
+                                                                            ,  )
+                                                                            to do \_ => go «»
+                                                                                        as ( CBV
+                                                                                        ,  )
+                                                                                        to \join
+                                                             as (CBV, )
+                                                             to do \_ => go do \here => go do \here => go pprint
+                                                                                                       as ( CBN
+                                                                                                       , ⇒ )
+                                                                                                       to ‹do \here => go do \here => go do \here => go do \here => go twentyThirty
+                                                                                                                                                                    as ( CBN
+                                                                                                                                                                    , ⇒ )
+                                                                                                                                                                    to ‹Step[\here]›
+                                                                                                                                                     as ( CBN
+                                                                                                                                                     , ⇒ )
+                                                                                                                                                     to ‹‹{do {| {r},
+                                                                                                                                                                 \here =>
+                                                                                                                                                                   go r
+                                                                                                                                                                   as ( CBN
+                                                                                                                                                                   , ⇐ )
+                                                                                                                                                                   to \here}}›,
+                                                                                                                                                         \here›
+                                                                                                                                      as ( CBN
+                                                                                                                                      , ⇒ )
+                                                                                                                                      to ‹Lower[\here]›
+                                                                                                                       as ( CBN
+                                                                                                                       , ⇒ )
+                                                                                                                       to ‹{\here}›,
+                                                                                                           \here›
+                                                                                        as ( CBN
+                                                                                        , ⇒ )
+                                                                                        to ‹{\here}›
+                                                                         as ( CBV
+                                                                         , ⇒ )
+                                                                         to \join
+-----------------------------------
+--- Executable Dual Core command ---
+go do {| range to (x, y), Lower[{\here}] =>
+           go do {| self to \here =>
+                      go range as CBN to ‹‹x, y›, \here›}
+           as CBN
+           to do self => go x as CBV to \here
+       | range to (x, y), Upper[{\here}] =>
+           go do {| self to \here =>
+                      go range as CBN to ‹‹x, y›, \here›}
+           as CBN
+           to do self => go y as CBV to \here
+       | range to (x, y), Done[\here] =>
+           go do {| self to \here =>
+                      go range as CBN to ‹‹x, y›, \here›}
+           as CBN
+           to do self => go do \here => go > as CBN to ‹x, \here›
+                         as CBN
+                         to ‹y, \here›
+       | range to (x, y), Step[{make}, \here] =>
+           go do {| self to \here =>
+                      go range as CBN to ‹‹x, y›, \here›}
+           as CBN
+           to do self => go make
+                         as CBN
+                         to ‹‹{do \here => go range
+                                           as CBN
+                                           to ‹‹do \here => go do \here => go do \here => go +
+                                                                                          as CBN
+                                                                                          to ‹x,
+                                                                                              \here›
+                                                                           as CBN
+                                                                           to ‹‹1[‹›]›,
+                                                                               \here›
+                                                            as CBN
+                                                            to ‹{\here}›, y›,
+                                               \here›}›, \here›}
+as CBN
+to do range => go do {| twentyThirty to \here =>
+                          go range as CBN to ‹‹‹20[‹›]›, ‹30[‹›]››, \here›}
+               as CBN
+               to do twentyThirty => go do \here => go do \here => go pprint
+                                                                   as CBN
+                                                                   to ‹do \here => go do \here => go twentyThirty
+                                                                                                  as CBN
+                                                                                                  to ‹Lower[\here]›
+                                                                                   as CBN
+                                                                                   to ‹{\here}›,
+                                                                       \here›
+                                                    as CBN
+                                                    to ‹{\here}›
+                                     as CBV
+                                     to do \_ => go do \here => go do \here => go pprint
+                                                                               as CBN
+                                                                               to ‹do \here => go do \here => go twentyThirty
+                                                                                                              as CBN
+                                                                                                              to ‹Upper[\here]›
+                                                                                               as CBN
+                                                                                               to ‹{\here}›,
+                                                                                   \here›
+                                                                as CBN
+                                                                to ‹{\here}›
+                                                 as CBV
+                                                 to do \_ => go do \join => go do \other => go do \other => go do \here => go do \here => go twentyThirty
+                                                                                                                                          as CBN
+                                                                                                                                          to ‹Done[\here]›
+                                                                                                                           as CBN
+                                                                                                                           to ‹{\here}›
+                                                                                                            as CBV
+                                                                                                            to do {| True =>
+                                                                                                                       go do \here => go do \here => go print
+                                                                                                                                                     as CBN
+                                                                                                                                                     to ‹‹"range(20,30) is done"[‹›]›,
+                                                                                                                                                         \here›
+                                                                                                                                      as CBN
+                                                                                                                                      to ‹{\here}›
+                                                                                                                       as CBV
+                                                                                                                       to do \_ => go «»
+                                                                                                                                   as CBV
+                                                                                                                                   to \join
+                                                                                                                   | \_ =>
+                                                                                                                       go «»
+                                                                                                                       as CBV
+                                                                                                                       to \other}
+                                                                                            as CBV
+                                                                                            to do \_ => go do \other => go do \here => go do \here => go print
+                                                                                                                                                      as CBN
+                                                                                                                                                      to ‹‹"range(20,30) has a step"[‹›]›,
+                                                                                                                                                          \here›
+                                                                                                                                       as CBN
+                                                                                                                                       to ‹{\here}›
+                                                                                                                        as CBV
+                                                                                                                        to do \_ => go «»
+                                                                                                                                    as CBV
+                                                                                                                                    to \join
+                                                                                                        as CBV
+                                                                                                        to do \_ => go «»
+                                                                                                                    as CBV
+                                                                                                                    to \other
+                                                                            as CBV
+                                                                            to do \_ => go «»
+                                                                                        as CBV
+                                                                                        to \join
+                                                             as CBV
+                                                             to do \_ => go do \here => go do \here => go pprint
+                                                                                                       as CBN
+                                                                                                       to ‹do \here => go do \here => go do \here => go do \here => go twentyThirty
+                                                                                                                                                                    as CBN
+                                                                                                                                                                    to ‹Step[\here]›
+                                                                                                                                                     as CBN
+                                                                                                                                                     to ‹‹{do {| {r},
+                                                                                                                                                                 \here =>
+                                                                                                                                                                   go r
+                                                                                                                                                                   as CBN
+                                                                                                                                                                   to \here}}›,
+                                                                                                                                                         \here›
+                                                                                                                                      as CBN
+                                                                                                                                      to ‹Lower[\here]›
+                                                                                                                       as CBN
+                                                                                                                       to ‹{\here}›,
+                                                                                                           \here›
+                                                                                        as CBN
+                                                                                        to ‹{\here}›
+                                                                         as CBV
+                                                                         to \join
+------------------------------------
+--- Focused Dual Core command ---
+go do {| range to (x, y), Lower[{\here}] =>
+           go do {| self to \here =>
+                      go range as CBN to «(x, y), \here»}
+           as CBN
+           to do self => go x as CBV to \here
+       | range to (x, y), Upper[{\here}] =>
+           go do {| self to \here =>
+                      go range as CBN to «(x, y), \here»}
+           as CBN
+           to do self => go y as CBV to \here
+       | range to (x, y), Done[\here] =>
+           go do {| self to \here =>
+                      go range as CBN to «(x, y), \here»}
+           as CBN
+           to do self => go do \here => go > as CBN to «x, \here»
+                         as CBN
+                         to «y, \here»
+       | range to (x, y), Step[{make}, \here] =>
+           go do {| self to \here =>
+                      go range as CBN to «(x, y), \here»}
+           as CBN
+           to do self => go make
+                         as CBN
+                         to do \it => go do \here => go range
+                                                     as CBN
+                                                     to do \it => go do \here => go do \here => go do \here => go +
+                                                                                                               as CBN
+                                                                                                               to «x,
+                                                                                                                   \here»
+                                                                                                as CBN
+                                                                                                to «1,
+                                                                                                    \here»
+                                                                                 as CBN
+                                                                                 to «{\here}»
+                                                                  as CBV
+                                                                  to do \temp0 => go \it
+                                                                                  as CBN
+                                                                                  to «(\temp0,
+                                                                                      y),
+                                                                                      \here»
+                                      as CBN
+                                      to do \temp0 => go \it
+                                                      as CBN
+                                                      to «{\temp0}, \here»}
+as CBN
+to do range => go do {| twentyThirty to \here =>
+                          go range as CBN to «(20, 30), \here»}
+               as CBN
+               to do twentyThirty => go do \here => go do \here => go pprint
+                                                                   as CBN
+                                                                   to do \it => go do \here => go do \here => go twentyThirty
+                                                                                                              as CBN
+                                                                                                              to «Lower[\here]»
+                                                                                               as CBN
+                                                                                               to «{\here}»
+                                                                                as CBV
+                                                                                to do \temp0 => go \it
+                                                                                                as CBN
+                                                                                                to «\temp0,
+                                                                                                    \here»
+                                                    as CBN
+                                                    to «{\here}»
+                                     as CBV
+                                     to do \_ => go do \here => go do \here => go pprint
+                                                                               as CBN
+                                                                               to do \it => go do \here => go do \here => go twentyThirty
+                                                                                                                          as CBN
+                                                                                                                          to «Upper[\here]»
+                                                                                                           as CBN
+                                                                                                           to «{\here}»
+                                                                                            as CBV
+                                                                                            to do \temp0 => go \it
+                                                                                                            as CBN
+                                                                                                            to «\temp0,
+                                                                                                                \here»
+                                                                as CBN
+                                                                to «{\here}»
+                                                 as CBV
+                                                 to do \_ => go do \join => go do \other => go do \other => go do \here => go do \here => go twentyThirty
+                                                                                                                                          as CBN
+                                                                                                                                          to «Done[\here]»
+                                                                                                                           as CBN
+                                                                                                                           to «{\here}»
+                                                                                                            as CBV
+                                                                                                            to do {| True =>
+                                                                                                                       go do \here => go do \here => go print
+                                                                                                                                                     as CBN
+                                                                                                                                                     to «"range(20,30) is done",
+                                                                                                                                                         \here»
+                                                                                                                                      as CBN
+                                                                                                                                      to «{\here}»
+                                                                                                                       as CBV
+                                                                                                                       to do \_ => go «»
+                                                                                                                                   as CBV
+                                                                                                                                   to \join
+                                                                                                                   | \_ =>
+                                                                                                                       go «»
+                                                                                                                       as CBV
+                                                                                                                       to \other}
+                                                                                            as CBV
+                                                                                            to do \_ => go do \other => go do \here => go do \here => go print
+                                                                                                                                                      as CBN
+                                                                                                                                                      to «"range(20,30) has a step",
+                                                                                                                                                          \here»
+                                                                                                                                       as CBN
+                                                                                                                                       to «{\here}»
+                                                                                                                        as CBV
+                                                                                                                        to do \_ => go «»
+                                                                                                                                    as CBV
+                                                                                                                                    to \join
+                                                                                                        as CBV
+                                                                                                        to do \_ => go «»
+                                                                                                                    as CBV
+                                                                                                                    to \other
+                                                                            as CBV
+                                                                            to do \_ => go «»
+                                                                                        as CBV
+                                                                                        to \join
+                                                             as CBV
+                                                             to do \_ => go do \here => go do \here => go pprint
+                                                                                                       as CBN
+                                                                                                       to do \it => go do \here => go do \here => go do \here => go do \here => go twentyThirty
+                                                                                                                                                                                as CBN
+                                                                                                                                                                                to «Step[\here]»
+                                                                                                                                                                 as CBN
+                                                                                                                                                                 to do \it => go do {| {r},
+                                                                                                                                                                                       \here =>
+                                                                                                                                                                                         go r
+                                                                                                                                                                                         as CBN
+                                                                                                                                                                                         to \here}
+                                                                                                                                                                              as CBN
+                                                                                                                                                                              to do \temp0 => go \it
+                                                                                                                                                                                              as CBN
+                                                                                                                                                                                              to «{\temp0},
+                                                                                                                                                                                                  \here»
+                                                                                                                                                  as CBN
+                                                                                                                                                  to «Lower[\here]»
+                                                                                                                                   as CBN
+                                                                                                                                   to «{\here}»
+                                                                                                                    as CBV
+                                                                                                                    to do \temp0 => go \it
+                                                                                                                                    as CBN
+                                                                                                                                    to «\temp0,
+                                                                                                                                        \here»
+                                                                                        as CBN
+                                                                                        to «{\here}»
+                                                                         as CBV
+                                                                         to \join
+-----------------------------------

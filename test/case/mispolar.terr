@@ -1,0 +1,9 @@
+Type Error: Mistyped term:
+    inc_later 13
+Expected: CBN : {int}
+Actual: CBN : {{{int}}}
+----------------------------------------
+Type Error (internal): Variable \here used with the wrong type.
+Expected: CBN : {{int}}
+Actual: CBN : int
+----------------------------------------

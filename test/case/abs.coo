@@ -1,0 +1,15 @@
+fun : int ~> int;
+fun negate n = 0 - n;
+
+fun abs : int ~> int;
+fun abs n if
+  | n < 0 = negate n
+  |       = n;
+
+val thirty = abs(10 * 3);
+val also_thirty = abs(10 * negate 3);
+
+pprint ! abs(10 - 3);
+pprint ! abs(3 - 10);
+pprint thirty;
+pprint also_thirty;

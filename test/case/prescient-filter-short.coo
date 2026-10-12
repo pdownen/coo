@@ -1,0 +1,66 @@
+# type Stream a = (rec a = [Head: {int} | Tail: {s}])
+
+fun same : bool -> bool ~> bool;
+fun | same True  True  = True
+    | same False False = True
+    | same _     _     = False;
+
+fun filterSwap : {int ~> bool}
+               -> {rec s = [Head: {int} | Tail: {{s}}]}
+               -> (rec s = [Head: {int} | Tail: {{s}}])
+                , (rec s = [Head: {int} | Tail: {{s}}]);
+fun filterSwap {p} where
+  | go filter {xs} to Head[{this}], that
+    = go xs.Head to {this}
+  | go filter {xs} to Tail[{this}], that
+    if {ys} <= xs.Tail
+    if | same (p(xs.Head)) (p(ys.Head))
+         = go filter {ys} to this, that
+       | = go filter {ys} to that, this;
+
+fun prescientFilter : {int ~> bool} -> {rec s = [Head: {int} | Tail: {{s}}]}
+                    ~> {rec s = [Head: {int} | Tail: {{s}}]};
+fun go prescientFilter {p} {xs} to {start}
+  = go filterSwap {p} {xs} to start, start;
+
+
+fun count : int -> rec s = [Head: {int} | Tail: {{s}}];
+fun | count(n).Head = n
+    | count(n).Tail = {count(n+1)};
+
+val nats = {count 0}
+  : {rec s = [Head: {int} | Tail: {{s}}]};
+
+val example = prescientFilter
+                {fn | 2 => False
+                    | x => x < 5}
+                nats;
+
+fun takes : int -> {rec s = [Head: {int} | Tail: {{s}}]}
+          ~> rec l = [Nil | Cons: int, l];
+fun | takes 0 {xs} = Nil
+    | takes n {xs} = Cons[xs.Head, takes (n-1) (xs.Tail)];
+
+val example1 = takes 1 example;
+val example3 = takes 3 example;
+val example4 = takes 4 example;
+#val example5 = takes 5 example;
+#val example9 = takes 9 example;
+
+fun print_list : (rec lst = [Nil | Cons: int, lst]) ~> ();
+fun | print_list Nil = ()
+    | print_list Cons[x,xs] = do => {
+        pprint x;
+        go print_list xs;
+      };
+
+print "The first element passing/failing: x /= 2 and x < 5:";
+print_list example1;
+print "The first 3 elements all passing/failing: x /= 2 and x < 5:";
+print_list example3;
+print "The first 4 elements all passing/failing: x /= 2 and x < 5:";
+print_list example4;
+#print "The first 5 elements all passing/failing: x /= 2 and x < 5:";
+#print_list example5;
+#print "The first 9 elements all passing/failing: x /= 2 and x < 5:";
+#print_list example9;

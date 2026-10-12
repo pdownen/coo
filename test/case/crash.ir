@@ -1,0 +1,63 @@
+--- Parsed source code ---
+print (concat "can't concatenate this string onto the number" 5)
+--------------------------
+--- Polarized source code ---
+⇓ print (⇓ concat "can't concatenate this string onto the number" 5)
+-----------------------------
+--- Simplified source code ---
+⇓ print (⇓ concat "can't concatenate this string onto the number" 5)
+------------------------------
+--- Desugared Dual Core command ---
+go do \here => go do \here => go print
+                              as (CBN, ⇒)
+                              to ‹do \here => go do \here => go do \here => go concat
+                                                                            as ( CBN
+                                                                            , ⇒ )
+                                                                            to ‹‹"can't concatenate this string onto the number"[‹›]›,
+                                                                                \here›
+                                                             as (CBN, ⇒)
+                                                             to ‹‹5[‹›]›, \here›
+                                              as (CBN, ⇒)
+                                              to ‹{\here}›, \here›
+               as (CBN, ⇒)
+               to ‹{\here}›
+as (CBV, ⇒)
+to \join
+-----------------------------------
+--- Executable Dual Core command ---
+go do \here => go do \here => go print
+                              as CBN
+                              to ‹do \here => go do \here => go do \here => go concat
+                                                                            as CBN
+                                                                            to ‹‹"can't concatenate this string onto the number"[‹›]›,
+                                                                                \here›
+                                                             as CBN
+                                                             to ‹‹5[‹›]›, \here›
+                                              as CBN
+                                              to ‹{\here}›, \here›
+               as CBN
+               to ‹{\here}›
+as CBV
+to \join
+------------------------------------
+--- Focused Dual Core command ---
+go do \here => go do \here => go print
+                              as CBN
+                              to do \it => go do \here => go do \here => go do \here => go concat
+                                                                                        as CBN
+                                                                                        to «"can't concatenate this string onto the number",
+                                                                                            \here»
+                                                                         as CBN
+                                                                         to «5,
+                                                                             \here»
+                                                          as CBN
+                                                          to «{\here}»
+                                           as CBV
+                                           to do \temp0 => go \it
+                                                           as CBN
+                                                           to «\temp0, \here»
+               as CBN
+               to «{\here}»
+as CBV
+to \join
+-----------------------------------

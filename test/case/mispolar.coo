@@ -1,0 +1,14 @@
+fun force : {{int}} ~> int;
+fun force {x} = x;
+
+fun inc : int ~> int;
+fun inc x = x+1;
+
+fun inc_later : int ~> {{int}};
+fun inc_later x = {x+1};
+
+pprint(inc(inc(9)));
+pprint(force{inc(inc 10)});
+pprint(force(inc_later(inc 11)));
+pprint(inc(force(inc_later 12)));
+pprint(inc(inc_later 13));  # Forgot to force the result of inc_later

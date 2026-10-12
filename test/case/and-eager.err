@@ -1,0 +1,3 @@
+Runtime Error: Unhandled argument to / operation.
+Found: 10, 0, {...}
+Expected: _:number, _:nonzero, {_}

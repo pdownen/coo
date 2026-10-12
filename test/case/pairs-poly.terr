@@ -1,0 +1,9 @@
+Type Error: Mistyped term:
+    dup 4
+Expected: CBN : {int}
+Actual: CBN : {int, int}
+----------------------------------------
+Type Error (internal): Variable \here used with the wrong type.
+Expected: CBN : int, int
+Actual: CBN : int
+----------------------------------------

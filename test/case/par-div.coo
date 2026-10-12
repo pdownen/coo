@@ -1,0 +1,27 @@
+fun : int -> int -> {}, {int};
+fun go parDiv x y to {err}, {main} if
+  | y == 0 = go to err
+  |        = go x/y to main;
+
+fun : int -> int ~> [Nothing | Just: int];
+fun undoDivide x y = do => {
+  fun err : ();
+  fun err = do () => go Nothing;
+
+  val a = parDiv x y {err};
+  pprint a;
+  val b = parDiv x a {err};
+  pprint b;
+  go Just[b];
+};
+
+fun print_answer : [Nothing | Just: int] ~> ();
+fun | print_answer Nothing = print "no answer"
+    | print_answer Just[n] = pprint n;
+
+print "20 / 10:";
+print_answer ! undoDivide 20 10;
+print "10 / 20:";
+print_answer ! undoDivide 10 20;
+print "1 / 0:";
+print_answer ! undoDivide 1  0;

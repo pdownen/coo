@@ -1,0 +1,25 @@
+fun : int -> int ~> [Nothing | Just: int];
+fun | safeDiv x 0 = Nothing
+    | safeDiv x y = Just[x/y];
+
+fun : int -> int ~> [Nothing | Just: int];
+fun undoDivide x y = do => {
+  val Just[a] = safeDiv x y
+      else Nothing => go Nothing;
+  pprint a;
+  val Just[b] = safeDiv x a
+      else Nothing => go Nothing;
+  pprint b;
+  go Just[b];
+};
+
+fun print_answer : [Nothing | Just: int] ~> ();
+fun | print_answer Nothing = print "no answer"
+    | print_answer Just[n] = pprint n;
+
+print "20 / 10:";
+print_answer ! undoDivide 20 10;
+print "10 / 20:";
+print_answer ! undoDivide 10 20;
+print "1 / 0:";
+print_answer ! undoDivide 1  0;

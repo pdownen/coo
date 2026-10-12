@@ -1,0 +1,19 @@
+fun dup : int -> {int, int};
+fun dup x = (x, x);
+
+fun fst : (string, int) ~> string;
+fun fst(x, y) = x;
+
+fun snd : (string, int) ~> int;
+fun snd(x, y) = y;
+
+val a1 = ("a", 1) : (string, int);
+print (fst a1);
+pprint (snd a1);
+
+val fourByFour = dup(dup 4);
+
+pprint ! fourByFour;
+pprint ! fst fourByFour;
+pprint ! snd fourByFour;
+pprint ! fst(snd(snd(1, 2, 3, 4)));

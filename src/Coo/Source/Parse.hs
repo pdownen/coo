@@ -197,7 +197,7 @@ coterm = parseOpTable coreOpTable basicCoterm <?> "coterm"
 coreOpTable :: OperationTable Parser Term
 coreOpTable = [ leftward  $ postfixOp dotOp <> infixLOp appOp,
                 rightward $ infixROp (adhocBinOps ["^", "^~"]),
-                leftward  $  infixLOp (adhocBinOps ["*", "*~", "/", "/~", "%"]),
+                leftward  $  infixLOp (adhocBinOps ["*", "*~", "/", "/~", "%", "%~"]),
                 leftward  $ infixLOp (adhocBinOps ["+", "+~", "-", "-~"]),
                 leftward  $  infixLOp (adhocBinOps ["<", "<~", ">", ">~", "=<~", ">=~"]),
                 leftward  $ infixLOp (adhocBinOps ["==", "==~", "/=", "/=~"]),

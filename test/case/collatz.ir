@@ -1,0 +1,474 @@
+--- Parsed source code ---
+fun even : int ~> bool
+fun even n => == (% n 2) 0
+fun collatz : int ~> int
+fun collatz n => do => if even n => go / n 2 go + (* n 3) 1
+match (0, 27) : int, int with
+where continue | with (i, 1) => pprint 1
+                                print "end of sequence reached after the following number of steps:"
+                                pprint i
+               | with (i, n) => pprint n
+                                val n = collatz n
+                                val i = + i 1
+                                go i, n to continue
+--------------------------
+--- Polarized source code ---
+fun even : int ~> bool
+fun even n => == (⇓ % n 2) 0
+fun collatz : int ~> int
+fun collatz n => do => if ⇓ even n => go / n 2 as CBN : ⇒
+                       go + (⇓ * n 3) 1 as CBN : ⇒
+match (0, 27) : CBV : int, int with
+where continue | with (i, 1) => ⇓ pprint 1
+                                ⇓ print "end of sequence reached after the following number of steps:"
+                                ⇓ pprint i
+               | with (i, n) => ⇓ pprint n
+                                val n = ⇓ collatz n
+                                val i = ⇓ + i 1
+                                go i, n as CBV : ⇐ to continue
+-----------------------------
+--- Simplified source code ---
+fun even : int ~> bool
+fun even n => == (⇓ % n 2) 0
+fun collatz : int ~> int
+fun collatz n => do => if ⇓ even n => go / n 2 as CBN : ⇒
+                       go + (⇓ * n 3) 1 as CBN : ⇒
+match (0, 27) : CBV : int, int with
+| where go continue to (i, 1) => ⇓ pprint 1
+                                 ⇓ print "end of sequence reached after the following number of steps:"
+                                 ⇓ pprint i
+| where go continue to (i, n) => ⇓ pprint n
+                                 val n = ⇓ collatz n
+                                 val i = ⇓ + i 1
+                                 go i, n as CBV : ⇐ to continue
+------------------------------
+--- Desugared Dual Core command ---
+go do {| even to n, \here =>
+           go do \here => go ==
+                          as (CBN, ⇒)
+                          to ‹do \here => go do \here => go do \here => go %
+                                                                        as ( CBN
+                                                                        , ⇒ )
+                                                                        to ‹n,
+                                                                            \here›
+                                                         as (CBN, ⇒)
+                                                         to ‹‹2[‹›]›, \here›
+                                          as (CBN, ⇒)
+                                          to ‹{\here}›, \here›
+           as (CBN, ⇒)
+           to ‹‹0[‹›]›, \here›}
+as (CBN, int, {bool})
+to do even => go do {| collatz to n, \here =>
+                         go do \context => go do \join => go do \other => go do \here => go do \here => go even
+                                                                                                        as ( CBN
+                                                                                                        , ⇒ )
+                                                                                                        to ‹n,
+                                                                                                            \here›
+                                                                                         as ( CBN
+                                                                                         , ⇒ )
+                                                                                         to ‹{\here}›
+                                                                          as ( CBV
+                                                                          , ⇒ )
+                                                                          to do {| True =>
+                                                                                     go do \here => go do \here => go /
+                                                                                                                   as ( CBN
+                                                                                                                   , ⇒ )
+                                                                                                                   to ‹n,
+                                                                                                                       \here›
+                                                                                                    as ( CBN
+                                                                                                    , ⇒ )
+                                                                                                    to ‹‹2[‹›]›,
+                                                                                                        \here›
+                                                                                     as ( CBN
+                                                                                     , ⇒ )
+                                                                                     to \context
+                                                                                 | \_ =>
+                                                                                     go «»
+                                                                                     as ( CBV
+                                                                                     ,  )
+                                                                                     to \other}
+                                                          as (CBV, )
+                                                          to do \_ => go «»
+                                                                      as (CBV, )
+                                                                      to \join
+                                           as (CBV, )
+                                           to do \_ => go do \here => go do \here => go +
+                                                                                     as ( CBN
+                                                                                     , ⇒ )
+                                                                                     to ‹do \here => go do \here => go do \here => go *
+                                                                                                                                   as ( CBN
+                                                                                                                                   , ⇒ )
+                                                                                                                                   to ‹n,
+                                                                                                                                       \here›
+                                                                                                                    as ( CBN
+                                                                                                                    , ⇒ )
+                                                                                                                    to ‹‹3[‹›]›,
+                                                                                                                        \here›
+                                                                                                     as ( CBN
+                                                                                                     , ⇒ )
+                                                                                                     to ‹{\here}›,
+                                                                                         \here›
+                                                                      as ( CBN
+                                                                      , ⇒ )
+                                                                      to ‹‹1[‹›]›,
+                                                                          \here›
+                                                       as (CBN, ⇒)
+                                                       to \context
+                         as (CBN, ⇐)
+                         to \here}
+              as (CBN, int, {int})
+              to do collatz => go do \join => go do \other => go do \here => go ‹‹0[‹›]›,
+                                                                                 ‹27[‹›]››
+                                                                             as ( CBV
+                                                                             , int, int )
+                                                                             to \here
+                                                              as (CBV, ⇒)
+                                                              to do {| continue to i,
+                                                                                   1 =>
+                                                                         go do \here => go do \here => go pprint
+                                                                                                       as ( CBN
+                                                                                                       , ⇒ )
+                                                                                                       to ‹‹1[‹›]›,
+                                                                                                           \here›
+                                                                                        as ( CBN
+                                                                                        , ⇒ )
+                                                                                        to ‹{\here}›
+                                                                         as ( CBV
+                                                                         , ⇒ )
+                                                                         to do \_ => go do \here => go do \here => go print
+                                                                                                                   as ( CBN
+                                                                                                                   , ⇒ )
+                                                                                                                   to ‹‹"end of sequence reached after the following number of steps:"[‹›]›,
+                                                                                                                       \here›
+                                                                                                    as ( CBN
+                                                                                                    , ⇒ )
+                                                                                                    to ‹{\here}›
+                                                                                     as ( CBV
+                                                                                     , ⇒ )
+                                                                                     to do \_ => go do \here => go do \here => go pprint
+                                                                                                                               as ( CBN
+                                                                                                                               , ⇒ )
+                                                                                                                               to ‹i,
+                                                                                                                                   \here›
+                                                                                                                as ( CBN
+                                                                                                                , ⇒ )
+                                                                                                                to ‹{\here}›
+                                                                                                 as ( CBV
+                                                                                                 , ⇒ )
+                                                                                                 to do \_ => go «»
+                                                                                                             as ( CBV
+                                                                                                             ,  )
+                                                                                                             to \join
+                                                                     | continue to i,
+                                                                                   n =>
+                                                                         go do \here => go do \here => go pprint
+                                                                                                       as ( CBN
+                                                                                                       , ⇒ )
+                                                                                                       to ‹n,
+                                                                                                           \here›
+                                                                                        as ( CBN
+                                                                                        , ⇒ )
+                                                                                        to ‹{\here}›
+                                                                         as ( CBV
+                                                                         , ⇒ )
+                                                                         to do \_ => go do \here => go do \here => go collatz
+                                                                                                                   as ( CBN
+                                                                                                                   , ⇒ )
+                                                                                                                   to ‹n,
+                                                                                                                       \here›
+                                                                                                    as ( CBN
+                                                                                                    , ⇒ )
+                                                                                                    to ‹{\here}›
+                                                                                     as ( CBV
+                                                                                     , ⇒ )
+                                                                                     to do n => go do \here => go do \here => go do \here => go +
+                                                                                                                                             as ( CBN
+                                                                                                                                             , ⇒ )
+                                                                                                                                             to ‹i,
+                                                                                                                                                 \here›
+                                                                                                                              as ( CBN
+                                                                                                                              , ⇒ )
+                                                                                                                              to ‹‹1[‹›]›,
+                                                                                                                                  \here›
+                                                                                                               as ( CBN
+                                                                                                               , ⇒ )
+                                                                                                               to ‹{\here}›
+                                                                                                as ( CBV
+                                                                                                , ⇒ )
+                                                                                                to do i => go ‹i,
+                                                                                                               n›
+                                                                                                           as ( CBV
+                                                                                                           , ⇐ )
+                                                                                                           to continue}
+                                              as (CBV, )
+                                              to do \_ => go «»
+                                                          as (CBV, )
+                                                          to \join
+                               as (CBV, )
+                               to do \_ => go «» as (CBV, ) to \join
+-----------------------------------
+--- Executable Dual Core command ---
+go do {| even to n, \here =>
+           go do \here => go ==
+                          as CBN
+                          to ‹do \here => go do \here => go do \here => go %
+                                                                        as CBN
+                                                                        to ‹n,
+                                                                            \here›
+                                                         as CBN
+                                                         to ‹‹2[‹›]›, \here›
+                                          as CBN
+                                          to ‹{\here}›, \here›
+           as CBN
+           to ‹‹0[‹›]›, \here›}
+as CBN
+to do even => go do {| collatz to n, \here =>
+                         go do \context => go do \join => go do \other => go do \here => go do \here => go even
+                                                                                                        as CBN
+                                                                                                        to ‹n,
+                                                                                                            \here›
+                                                                                         as CBN
+                                                                                         to ‹{\here}›
+                                                                          as CBV
+                                                                          to do {| True =>
+                                                                                     go do \here => go do \here => go /
+                                                                                                                   as CBN
+                                                                                                                   to ‹n,
+                                                                                                                       \here›
+                                                                                                    as CBN
+                                                                                                    to ‹‹2[‹›]›,
+                                                                                                        \here›
+                                                                                     as CBN
+                                                                                     to \context
+                                                                                 | \_ =>
+                                                                                     go «»
+                                                                                     as CBV
+                                                                                     to \other}
+                                                          as CBV
+                                                          to do \_ => go «»
+                                                                      as CBV
+                                                                      to \join
+                                           as CBV
+                                           to do \_ => go do \here => go do \here => go +
+                                                                                     as CBN
+                                                                                     to ‹do \here => go do \here => go do \here => go *
+                                                                                                                                   as CBN
+                                                                                                                                   to ‹n,
+                                                                                                                                       \here›
+                                                                                                                    as CBN
+                                                                                                                    to ‹‹3[‹›]›,
+                                                                                                                        \here›
+                                                                                                     as CBN
+                                                                                                     to ‹{\here}›,
+                                                                                         \here›
+                                                                      as CBN
+                                                                      to ‹‹1[‹›]›,
+                                                                          \here›
+                                                       as CBN
+                                                       to \context
+                         as CBN
+                         to \here}
+              as CBN
+              to do collatz => go do \join => go do \other => go do \here => go ‹‹0[‹›]›,
+                                                                                 ‹27[‹›]››
+                                                                             as CBV
+                                                                             to \here
+                                                              as CBV
+                                                              to do {| continue to i,
+                                                                                   1 =>
+                                                                         go do \here => go do \here => go pprint
+                                                                                                       as CBN
+                                                                                                       to ‹‹1[‹›]›,
+                                                                                                           \here›
+                                                                                        as CBN
+                                                                                        to ‹{\here}›
+                                                                         as CBV
+                                                                         to do \_ => go do \here => go do \here => go print
+                                                                                                                   as CBN
+                                                                                                                   to ‹‹"end of sequence reached after the following number of steps:"[‹›]›,
+                                                                                                                       \here›
+                                                                                                    as CBN
+                                                                                                    to ‹{\here}›
+                                                                                     as CBV
+                                                                                     to do \_ => go do \here => go do \here => go pprint
+                                                                                                                               as CBN
+                                                                                                                               to ‹i,
+                                                                                                                                   \here›
+                                                                                                                as CBN
+                                                                                                                to ‹{\here}›
+                                                                                                 as CBV
+                                                                                                 to do \_ => go «»
+                                                                                                             as CBV
+                                                                                                             to \join
+                                                                     | continue to i,
+                                                                                   n =>
+                                                                         go do \here => go do \here => go pprint
+                                                                                                       as CBN
+                                                                                                       to ‹n,
+                                                                                                           \here›
+                                                                                        as CBN
+                                                                                        to ‹{\here}›
+                                                                         as CBV
+                                                                         to do \_ => go do \here => go do \here => go collatz
+                                                                                                                   as CBN
+                                                                                                                   to ‹n,
+                                                                                                                       \here›
+                                                                                                    as CBN
+                                                                                                    to ‹{\here}›
+                                                                                     as CBV
+                                                                                     to do n => go do \here => go do \here => go do \here => go +
+                                                                                                                                             as CBN
+                                                                                                                                             to ‹i,
+                                                                                                                                                 \here›
+                                                                                                                              as CBN
+                                                                                                                              to ‹‹1[‹›]›,
+                                                                                                                                  \here›
+                                                                                                               as CBN
+                                                                                                               to ‹{\here}›
+                                                                                                as CBV
+                                                                                                to do i => go ‹i,
+                                                                                                               n›
+                                                                                                           as CBV
+                                                                                                           to continue}
+                                              as CBV
+                                              to do \_ => go «» as CBV to \join
+                               as CBV
+                               to do \_ => go «» as CBV to \join
+------------------------------------
+--- Focused Dual Core command ---
+go do {| even to n, \here =>
+           go do \here => go ==
+                          as CBN
+                          to do \it => go do \here => go do \here => go do \here => go %
+                                                                                    as CBN
+                                                                                    to «n,
+                                                                                        \here»
+                                                                     as CBN
+                                                                     to «2,
+                                                                         \here»
+                                                      as CBN
+                                                      to «{\here}»
+                                       as CBV
+                                       to do \temp0 => go \it
+                                                       as CBN
+                                                       to «\temp0, \here»
+           as CBN
+           to «0, \here»}
+as CBN
+to do even => go do {| collatz to n, \here =>
+                         go do \context => go do \join => go do \other => go do \here => go do \here => go even
+                                                                                                        as CBN
+                                                                                                        to «n,
+                                                                                                            \here»
+                                                                                         as CBN
+                                                                                         to «{\here}»
+                                                                          as CBV
+                                                                          to do {| True =>
+                                                                                     go do \here => go do \here => go /
+                                                                                                                   as CBN
+                                                                                                                   to «n,
+                                                                                                                       \here»
+                                                                                                    as CBN
+                                                                                                    to «2,
+                                                                                                        \here»
+                                                                                     as CBN
+                                                                                     to \context
+                                                                                 | \_ =>
+                                                                                     go «»
+                                                                                     as CBV
+                                                                                     to \other}
+                                                          as CBV
+                                                          to do \_ => go «»
+                                                                      as CBV
+                                                                      to \join
+                                           as CBV
+                                           to do \_ => go do \here => go do \here => go +
+                                                                                     as CBN
+                                                                                     to do \it => go do \here => go do \here => go do \here => go *
+                                                                                                                                               as CBN
+                                                                                                                                               to «n,
+                                                                                                                                                   \here»
+                                                                                                                                as CBN
+                                                                                                                                to «3,
+                                                                                                                                    \here»
+                                                                                                                 as CBN
+                                                                                                                 to «{\here}»
+                                                                                                  as CBV
+                                                                                                  to do \temp0 => go \it
+                                                                                                                  as CBN
+                                                                                                                  to «\temp0,
+                                                                                                                      \here»
+                                                                      as CBN
+                                                                      to «1,
+                                                                          \here»
+                                                       as CBN
+                                                       to \context
+                         as CBN
+                         to \here}
+              as CBN
+              to do collatz => go do \join => go do \other => go do \here => go «0,
+                                                                                 27»
+                                                                             as CBV
+                                                                             to \here
+                                                              as CBV
+                                                              to do {| continue to i,
+                                                                                   1 =>
+                                                                         go do \here => go do \here => go pprint
+                                                                                                       as CBN
+                                                                                                       to «1,
+                                                                                                           \here»
+                                                                                        as CBN
+                                                                                        to «{\here}»
+                                                                         as CBV
+                                                                         to do \_ => go do \here => go do \here => go print
+                                                                                                                   as CBN
+                                                                                                                   to «"end of sequence reached after the following number of steps:",
+                                                                                                                       \here»
+                                                                                                    as CBN
+                                                                                                    to «{\here}»
+                                                                                     as CBV
+                                                                                     to do \_ => go do \here => go do \here => go pprint
+                                                                                                                               as CBN
+                                                                                                                               to «i,
+                                                                                                                                   \here»
+                                                                                                                as CBN
+                                                                                                                to «{\here}»
+                                                                                                 as CBV
+                                                                                                 to do \_ => go «»
+                                                                                                             as CBV
+                                                                                                             to \join
+                                                                     | continue to i,
+                                                                                   n =>
+                                                                         go do \here => go do \here => go pprint
+                                                                                                       as CBN
+                                                                                                       to «n,
+                                                                                                           \here»
+                                                                                        as CBN
+                                                                                        to «{\here}»
+                                                                         as CBV
+                                                                         to do \_ => go do \here => go do \here => go collatz
+                                                                                                                   as CBN
+                                                                                                                   to «n,
+                                                                                                                       \here»
+                                                                                                    as CBN
+                                                                                                    to «{\here}»
+                                                                                     as CBV
+                                                                                     to do n => go do \here => go do \here => go do \here => go +
+                                                                                                                                             as CBN
+                                                                                                                                             to «i,
+                                                                                                                                                 \here»
+                                                                                                                              as CBN
+                                                                                                                              to «1,
+                                                                                                                                  \here»
+                                                                                                               as CBN
+                                                                                                               to «{\here}»
+                                                                                                as CBV
+                                                                                                to do i => go «i,
+                                                                                                               n»
+                                                                                                           as CBV
+                                                                                                           to continue}
+                                              as CBV
+                                              to do \_ => go «» as CBV to \join
+                               as CBV
+                               to do \_ => go «» as CBV to \join
+-----------------------------------

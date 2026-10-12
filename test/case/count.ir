@@ -1,0 +1,260 @@
+--- Parsed source code ---
+fun count : int -> rec stream = [ Head : {int} | Tail : stream ]
+fun | count n .Head => n
+    | count n .Tail => count (+ n 1)
+fun nats : rec stream = [ Head : {int} | Tail : stream ]
+fun nats => count 0
+fun prints : int, {rec strm = [ Head : {int} | Tail : strm ]} ~> 
+fun | prints 0 {_} => 
+    | prints n {xs} => do => pprint (xs .Head) go prints (- n 1) {xs .Tail}
+prints 100 {nats}
+--------------------------
+--- Polarized source code ---
+fun count : int -> rec stream = [ Head : {int} | Tail : stream ]
+fun | count n .Head => ⇑ n
+    | count n .Tail => count (⇓ + n 1)
+fun nats : rec stream = [ Head : {int} | Tail : stream ]
+fun nats => count 0
+fun prints : int, {rec strm = [ Head : {int} | Tail : strm ]} ~> 
+fun | prints 0 {_} => ⇑ ()
+    | prints n {xs} => do => ⇓ pprint (⇓ xs .Head)
+                             go prints (⇓ - n 1) {xs .Tail} as CBN : ⇒
+⇓ prints 100 {nats}
+-----------------------------
+--- Simplified source code ---
+fun count : int -> rec stream = [ Head : {int} | Tail : stream ]
+fun | go count to (n, Head[{\here}]) => go n as CBV : ⇐ to \here
+    | count n .Tail => count (⇓ + n 1)
+fun nats : rec stream = [ Head : {int} | Tail : stream ]
+fun nats => count 0
+fun prints : int, {rec strm = [ Head : {int} | Tail : strm ]} ~> 
+fun | go prints to (0, {_}, {\here}) => go  as CBV : ⇐ to \here
+    | prints n {xs} => do => ⇓ pprint (⇓ xs .Head)
+                             go prints (⇓ - n 1) {xs .Tail} as CBN : ⇒
+⇓ prints 100 {nats}
+------------------------------
+--- Desugared Dual Core command ---
+go do {| count to n, Head[{\here}] =>
+           go n as (CBV, ⇐) to \here
+       | count to n, Tail[\here] =>
+           go count
+           as (CBN, ⇒)
+           to ‹do \here => go do \here => go do \here => go +
+                                                         as (CBN, ⇒)
+                                                         to ‹n, \here›
+                                          as (CBN, ⇒)
+                                          to ‹‹1[‹›]›, \here›
+                           as (CBN, ⇒)
+                           to ‹{\here}›, \here›}
+as (CBN, int, rec stream = [ Head : {int} | Tail : stream ])
+to do count => go do {| nats to \here =>
+                          go count as (CBN, ⇒) to ‹‹0[‹›]›, \here›}
+               as (CBN, rec stream = [ Head : {int} | Tail : stream ])
+               to do nats => go do {| prints to 0, {\_}, {\here} =>
+                                        go ‹› as (CBV, ⇐) to \here
+                                    | prints to n, {xs}, \here =>
+                                        go do \context => go do \here => go do \here => go pprint
+                                                                                        as ( CBN
+                                                                                        , ⇒ )
+                                                                                        to ‹do \here => go do \here => go xs
+                                                                                                                       as ( CBN
+                                                                                                                       , ⇒ )
+                                                                                                                       to ‹Head[\here]›
+                                                                                                        as ( CBN
+                                                                                                        , ⇒ )
+                                                                                                        to ‹{\here}›,
+                                                                                            \here›
+                                                                         as ( CBN
+                                                                         , ⇒ )
+                                                                         to ‹{\here}›
+                                                          as (CBV, ⇒)
+                                                          to do \_ => go do \here => go do \here => go prints
+                                                                                                    as ( CBN
+                                                                                                    , ⇒ )
+                                                                                                    to ‹do \here => go do \here => go do \here => go -
+                                                                                                                                                  as ( CBN
+                                                                                                                                                  , ⇒ )
+                                                                                                                                                  to ‹n,
+                                                                                                                                                      \here›
+                                                                                                                                   as ( CBN
+                                                                                                                                   , ⇒ )
+                                                                                                                                   to ‹‹1[‹›]›,
+                                                                                                                                       \here›
+                                                                                                                    as ( CBN
+                                                                                                                    , ⇒ )
+                                                                                                                    to ‹{\here}›,
+                                                                                                        \here›
+                                                                                     as ( CBN
+                                                                                     , ⇒ )
+                                                                                     to ‹‹{do \here => go xs
+                                                                                                       as ( CBN
+                                                                                                       , ⇒ )
+                                                                                                       to ‹Tail[\here]›}›,
+                                                                                         \here›
+                                                                      as ( CBN
+                                                                      , ⇒ )
+                                                                      to \context
+                                        as (CBN, ⇐)
+                                        to \here}
+                             as ( CBN
+                             , int, {rec strm = [ Head : {int}
+                             | Tail : strm ]}, {} )
+                             to do prints => go do \here => go do \here => go do \here => go prints
+                                                                                          as ( CBN
+                                                                                          , ⇒ )
+                                                                                          to ‹‹100[‹›]›,
+                                                                                              \here›
+                                                                           as ( CBN
+                                                                           , ⇒ )
+                                                                           to ‹‹{nats}›,
+                                                                               \here›
+                                                            as (CBN, ⇒)
+                                                            to ‹{\here}›
+                                             as (CBV, ⇒)
+                                             to \join
+-----------------------------------
+--- Executable Dual Core command ---
+go do {| count to n, Head[{\here}] =>
+           go n as CBV to \here
+       | count to n, Tail[\here] =>
+           go count
+           as CBN
+           to ‹do \here => go do \here => go do \here => go +
+                                                         as CBN
+                                                         to ‹n, \here›
+                                          as CBN
+                                          to ‹‹1[‹›]›, \here›
+                           as CBN
+                           to ‹{\here}›, \here›}
+as CBN
+to do count => go do {| nats to \here =>
+                          go count as CBN to ‹‹0[‹›]›, \here›}
+               as CBN
+               to do nats => go do {| prints to 0, {\_}, {\here} =>
+                                        go ‹› as CBV to \here
+                                    | prints to n, {xs}, \here =>
+                                        go do \context => go do \here => go do \here => go pprint
+                                                                                        as CBN
+                                                                                        to ‹do \here => go do \here => go xs
+                                                                                                                       as CBN
+                                                                                                                       to ‹Head[\here]›
+                                                                                                        as CBN
+                                                                                                        to ‹{\here}›,
+                                                                                            \here›
+                                                                         as CBN
+                                                                         to ‹{\here}›
+                                                          as CBV
+                                                          to do \_ => go do \here => go do \here => go prints
+                                                                                                    as CBN
+                                                                                                    to ‹do \here => go do \here => go do \here => go -
+                                                                                                                                                  as CBN
+                                                                                                                                                  to ‹n,
+                                                                                                                                                      \here›
+                                                                                                                                   as CBN
+                                                                                                                                   to ‹‹1[‹›]›,
+                                                                                                                                       \here›
+                                                                                                                    as CBN
+                                                                                                                    to ‹{\here}›,
+                                                                                                        \here›
+                                                                                     as CBN
+                                                                                     to ‹‹{do \here => go xs
+                                                                                                       as CBN
+                                                                                                       to ‹Tail[\here]›}›,
+                                                                                         \here›
+                                                                      as CBN
+                                                                      to \context
+                                        as CBN
+                                        to \here}
+                             as CBN
+                             to do prints => go do \here => go do \here => go do \here => go prints
+                                                                                          as CBN
+                                                                                          to ‹‹100[‹›]›,
+                                                                                              \here›
+                                                                           as CBN
+                                                                           to ‹‹{nats}›,
+                                                                               \here›
+                                                            as CBN
+                                                            to ‹{\here}›
+                                             as CBV
+                                             to \join
+------------------------------------
+--- Focused Dual Core command ---
+go do {| count to n, Head[{\here}] =>
+           go n as CBV to \here
+       | count to n, Tail[\here] =>
+           go count
+           as CBN
+           to do \it => go do \here => go do \here => go do \here => go +
+                                                                     as CBN
+                                                                     to «n,
+                                                                         \here»
+                                                      as CBN
+                                                      to «1, \here»
+                                       as CBN
+                                       to «{\here}»
+                        as CBV
+                        to do \temp0 => go \it as CBN to «\temp0, \here»}
+as CBN
+to do count => go do {| nats to \here =>
+                          go count as CBN to «0, \here»}
+               as CBN
+               to do nats => go do {| prints to 0, {\_}, {\here} =>
+                                        go «» as CBV to \here
+                                    | prints to n, {xs}, \here =>
+                                        go do \context => go do \here => go do \here => go pprint
+                                                                                        as CBN
+                                                                                        to do \it => go do \here => go do \here => go xs
+                                                                                                                                   as CBN
+                                                                                                                                   to «Head[\here]»
+                                                                                                                    as CBN
+                                                                                                                    to «{\here}»
+                                                                                                     as CBV
+                                                                                                     to do \temp0 => go \it
+                                                                                                                     as CBN
+                                                                                                                     to «\temp0,
+                                                                                                                         \here»
+                                                                         as CBN
+                                                                         to «{\here}»
+                                                          as CBV
+                                                          to do \_ => go do \here => go do \here => go prints
+                                                                                                    as CBN
+                                                                                                    to do \it => go do \here => go do \here => go do \here => go -
+                                                                                                                                                              as CBN
+                                                                                                                                                              to «n,
+                                                                                                                                                                  \here»
+                                                                                                                                               as CBN
+                                                                                                                                               to «1,
+                                                                                                                                                   \here»
+                                                                                                                                as CBN
+                                                                                                                                to «{\here}»
+                                                                                                                 as CBV
+                                                                                                                 to do \temp0 => go \it
+                                                                                                                                 as CBN
+                                                                                                                                 to «\temp0,
+                                                                                                                                     \here»
+                                                                                     as CBN
+                                                                                     to do \it => go do \here => go xs
+                                                                                                                 as CBN
+                                                                                                                 to «Tail[\here]»
+                                                                                                  as CBN
+                                                                                                  to do \temp0 => go \it
+                                                                                                                  as CBN
+                                                                                                                  to «{\temp0},
+                                                                                                                      \here»
+                                                                      as CBN
+                                                                      to \context
+                                        as CBN
+                                        to \here}
+                             as CBN
+                             to do prints => go do \here => go do \here => go do \here => go prints
+                                                                                          as CBN
+                                                                                          to «100,
+                                                                                              \here»
+                                                                           as CBN
+                                                                           to «{nats},
+                                                                               \here»
+                                                            as CBN
+                                                            to «{\here}»
+                                             as CBV
+                                             to \join
+-----------------------------------

@@ -1,0 +1,120 @@
+# General stream and list utility functions
+fun always : bool -> rec s = [Head: {bool} | Tail: {{s}}];
+fun | always(x).Head = x
+    | always(x).Tail = {always(x)};
+
+fun count : int -> rec s = [Head: {int} | Tail: {{s}}];
+fun | count(n).Head = n
+    | count(n).Tail = {count(n+1)};
+
+val nats = {count 0}
+  : {rec s = [Head: {int} | Tail: {{s}}]};
+
+fun takes : int -> {rec s = [Head: {int} | Tail: {{s}}]}
+          ~> rec l = [Nil | Cons: int, l];
+fun | takes 0 {xs} = Nil
+    | takes n {xs} = Cons[xs.Head, takes (n-1) (xs.Tail)];
+
+fun maps : {(int, bool) ~> int} -> {rec s = [Head: {int, bool} | Tail: {{s}}]}
+         -> rec s = [Head: {int} | Tail: {{s}}];
+fun maps {f} where
+  | stream{xs}.Head = f(xs.Head)
+  | stream{xs}.Tail = {stream(xs.Tail)};
+
+fun zips : {rec s = [Head: {int} | Tail: {{s}}]}
+         -> {rec s = [Head: {bool} | Tail: {{s}}]}
+         -> rec s = [Head: {int, bool} | Tail: {{s}}];
+fun | zips {xs} {ys} .Head = (xs.Head, ys.Head)
+    | zips {xs} {ys} .Tail = {zips (xs.Tail) (ys.Tail)};
+
+fun appends : (rec l = [Nil | Cons: bool, l])
+            -> {rec s = [Head: {bool} | Tail: {{s}}]}
+            -> rec s = [Head: {bool} | Tail: {{s}}];
+fun | appends Nil       {ys}      = ys
+    | appends Cons[x,xs] ys .Head = x
+    | appends Cons[x,xs] ys .Tail = {appends xs ys};
+
+fun print_list : (rec lst = [Nil | Cons: int, lst]) ~> ();
+fun | print_list Nil = ()
+    | print_list Cons[x,xs] = do => {
+        pprint x;
+        go print_list xs;
+      };
+
+fun same : bool -> bool ~> bool;
+fun | same True  True  = True
+    | same False False = True
+    | same _     _     = False;
+
+# The prescient infinite filter function
+fun filterSwap : {int ~> bool}
+               -> {rec s = [Head: {int} | Tail: {{s}}]}
+               -> (rec s = [Head: {int} | Tail: {{s}}])
+                , (rec s = [Head: {int} | Tail: {{s}}]);
+fun filterSwap {p} where
+  | go filter {xs} to Head[{this}], that
+    = go xs.Head to {this}
+  | go filter {xs} to Tail[{this}], that
+    if {ys} <= xs.Tail
+    if | same (p(xs.Head)) (p(ys.Head))
+         = go filter {ys} to this, that
+       | = go filter {ys} to that, this;
+
+fun prescientFilter : {int ~> bool} -> {rec s = [Head: {int} | Tail: {{s}}]}
+                    ~> {rec s = [Head: {int} | Tail: {{s}}]};
+fun go prescientFilter {p} {xs} to {start}
+  = go filterSwap {p} {xs} to start, start;
+
+# Same filter definitions at a different type, due to monomorphization
+fun filterSwap2 : {(int, bool) ~> bool}
+                -> {rec s = [Head: {int, bool} | Tail: {{s}}]}
+                -> (rec s = [Head: {int, bool} | Tail: {{s}}])
+                 , (rec s = [Head: {int, bool} | Tail: {{s}}]);
+fun filterSwap2 {p} where
+  | go filter {xs} to Head[{this}], that
+    = go xs.Head to {this}
+  | go filter {xs} to Tail[{this}], that
+    if {ys} <= xs.Tail
+    if | same (p(xs.Head)) (p(ys.Head))
+         = go filter {ys} to this, that
+       | = go filter {ys} to that, this;
+
+fun prescientFilter2 : {(int, bool) ~> bool} -> {rec s = [Head: {int, bool} | Tail: {{s}}]}
+                     ~> {rec s = [Head: {int, bool} | Tail: {{s}}]};
+fun go prescientFilter2 {p} {xs} to {start}
+  = go filterSwap2 {p} {xs} to start, start;
+
+
+# The infinite pigeonhole assignment function
+fun infinitePigeons : {rec s = [Head: {bool} | Tail: {{s}}]}
+                    ~> {rec s = [Head: {int} | Tail: {{s}}]};
+fun infinitePigeons bits = do => {
+  val decided = prescientFilter2 {fn(x,y) => y} {zips nats bits};
+  go {maps {fn(x,y) => x} decided};
+};
+
+# Testing a stream with 5 hand-selected booleans then is always False
+fun test : rec s = [Head: {bool} | Tail: {{s}}];
+fun test =
+    appends
+    Cons[True, Cons[True, Cons[False, Cons[True, Cons[True, Nil]]]]]
+    {always False};
+
+val pigeons = infinitePigeons {test};
+
+val pigeons1 = takes 1 pigeons;
+val pigeons3 = takes 3 pigeons;
+val pigeons4 = takes 4 pigeons;
+val pigeons5 = takes 5 pigeons;
+val pigeons9 = takes 9 pigeons;
+
+print "The first pigeon is:";
+print_list pigeons1;
+print "The first 3 pigeons are:";
+print_list pigeons3;
+print "The first 4 pigeons are:";
+print_list pigeons4;
+print "The first 5 pigeons are:";
+print_list pigeons5;
+print "The first 9 pigeons are:";
+print_list pigeons9;

@@ -1,0 +1,11 @@
+Type Error: No type given for the function definition:
+    fun iterating {obj} | self .Each {f} => do => if ⇓ self .Done => go ⇑ ()
+                                                                     as CBN : ⇐
+                                                  ⇓ f (⇓ self .Lower)
+                                                  go self .Step {iterating} .Each {f}
+                                                  as CBN : ⇒
+                        | self => obj
+----------------------------------------
+Type Error (internal): Untyped variable ten20 cannot be inferred.
+(Try giving it a type annotation at its binding or use sites.)
+----------------------------------------

@@ -1,0 +1,14 @@
+fun sum : (rec lst = [Nil | Cons: int, lst]) -> {int};
+fun | sum Nil        = 0
+    | sum Cons[x,xs] = x + sum xs;
+
+fun range : int -> int ~> rec lst = [Nil | Cons: int, lst];
+fun range x y if
+  | x > y = Nil
+  |       = Cons[x, range (x+1) y];
+
+pprint ! sum Nil;
+pprint ! sum Cons[1, Nil];
+pprint ! sum Cons[1, Cons[2, Cons[3, Nil]]];
+pprint ! sum Cons[1, Cons[2, Cons[3, Cons[4, Cons[5, Nil]]]]];
+pprint ! sum(range 1 10);

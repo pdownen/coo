@@ -1,0 +1,8 @@
+Type Error: No type given for the function definition:
+    fun collecting {obj} | self .Collect {f} if ⇓ self .Done => ⇑ Nil
+                         | self .Collect {f} => ⇑ Cons[(⇓ f (⇓ self .Lower)), ⇓ self .Step {collecting} .Collect {f}]
+                         | self => obj
+----------------------------------------
+Type Error (internal): Untyped variable collecting cannot be inferred.
+(Try giving it a type annotation at its binding or use sites.)
+----------------------------------------

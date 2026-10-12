@@ -100,3 +100,39 @@ print "3 pigeons:"; pprint pigeons3;
 print "4 pigeons:"; pprint pigeons4;
 #print "5 pigeons:"; pprint pigeons5;
 #print "9 pigeons:"; pprint pigeons9;
+
+
+print "forced counting";
+val x0 = nats;
+val (h0, x1) = (force(x0).Head, force(x0).Tail);
+pprint h0;
+val (h1, x2) = (force(x1).Head, force(x1).Tail);
+pprint h1;
+val (h2, x3) = (force(x2).Head, force(x2).Tail);
+pprint h2;
+val (h3, x4) = (force(x3).Head, force(x3).Tail);
+pprint h3;
+val (h4, x5) = (force(x4).Head, force(x4).Tail);
+pprint h4;
+val (h5, x6) = (force(x5).Head, force(x5).Tail);
+pprint h5;
+val (h6, x7) = (force(x6).Head, force(x6).Tail);
+pprint h6;
+
+print "braced counting";
+val {y0} = nats;
+val (h0, {y1}) = (y0.Head, y0.Tail);
+pprint h0;
+val (h1, {y2}) = (y1.Head, y1.Tail);
+pprint h1;
+val (h2, {y3}) = (y2.Head, y2.Tail);
+pprint h2;
+val (h3, {y4}) = (y3.Head, y3.Tail);
+pprint h3;
+val (h4, {y5}) = (y4.Head, y4.Tail);
+pprint h4;
+val (h5, {y6}) = (y5.Head, y5.Tail);
+pprint h5;
+val (h6, {y7}) = (y6.Head, y6.Tail);
+pprint h6;
+

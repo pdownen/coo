@@ -1,0 +1,30 @@
+--- Parsed source code ---
+print "Hello :>"
+--------------------------
+--- Polarized source code ---
+⇓ print "Hello :>"
+-----------------------------
+--- Simplified source code ---
+⇓ print "Hello :>"
+------------------------------
+--- Desugared Dual Core command ---
+go do \here => go do \here => go print as (CBN, ⇒) to ‹‹"Hello :>"[‹›]›, \here›
+               as (CBN, ⇒)
+               to ‹{\here}›
+as (CBV, ⇒)
+to \join
+-----------------------------------
+--- Executable Dual Core command ---
+go do \here => go do \here => go print as CBN to ‹‹"Hello :>"[‹›]›, \here›
+               as CBN
+               to ‹{\here}›
+as CBV
+to \join
+------------------------------------
+--- Focused Dual Core command ---
+go do \here => go do \here => go print as CBN to «"Hello :>", \here»
+               as CBN
+               to «{\here}»
+as CBV
+to \join
+-----------------------------------

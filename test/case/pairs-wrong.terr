@@ -1,0 +1,8 @@
+Type Error: Mistyped use of variable: x
+Expected: CBV : int
+Actual: CBV : string
+----------------------------------------
+Type Error (internal): Variable x used with the wrong type.
+Expected: CBV : int
+Actual: CBV : string
+----------------------------------------

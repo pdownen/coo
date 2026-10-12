@@ -1,0 +1,16 @@
+Collecting the first 10 squares:
+1
+4
+9
+16
+25
+36
+49
+64
+81
+100
+Inherited answers:
+1
+10
+collecting{range(1,10)} has a step
+2
