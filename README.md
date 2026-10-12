@@ -290,6 +290,40 @@ on a short Coo program to ensure that it is working and available.  `setup.hs`
 assumes that you already have GHC and Cabal installed on your system.
 
 
+A Note About Linux Dependencies
+-------------------------------
+
+Some Hackage dependencies (listed in the `coo.cabal`) require some development
+files that may or may not be installed already on your system.  Cabal should be
+able to find and build these tools for your automatically (particularly on
+Windows and MacOC), but this sometimes fails on Linux systems.  Notable standard
+development files needed for Coo's Hackage dependencies include
+
+* the GNU Multiple Precision Arithmetic Library (GMP)
+
+* ncurses
+
+To manually install these dependencies on Linux, try the following.
+
+### On Ubuntu / Debian / Mint
+
+> sudo apt install libgmp-dev
+> sudo apt install libncurses5-dev
+
+This procedure has been tested on a fresh Ubuntu installation, and successfully
+allows `setup.sh` run to completion.
+
+### On Fedora / RHEL / CentOS
+
+> sudo dnf install gmp-devel
+> sudo dnf install ncurses-devel
+
+### On Arch
+
+> sudo pacman -S gmp
+> sudo pacman -S ncurses
+
+
 A Note About Unicode
 --------------------
 
