@@ -1,5 +1,7 @@
 module Main (main) where
 
+import GHC.IO.Encoding (setLocaleEncoding, utf8)
+
 import Coo.REPL.Inside
 import Data.Char (toLower)
 import Data.Maybe (isNothing)
@@ -8,6 +10,7 @@ import Prettyprinter
 
 main :: IO ()
 main = do
+  setLocaleEncoding utf8
   opts <- execParser cli
   let initOpts = RO{ typeOption = initTypeOption opts,
                      stopAfterTypes = checkOnly opts,

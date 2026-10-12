@@ -1,5 +1,7 @@
 module Main (main) where
 
+import GHC.IO.Encoding (setLocaleEncoding, utf8)
+
 import Test.Hspec
 import Test.Hspec.Core.Spec(SpecM(..))
 import Control.Monad.IO.Class (liftIO)
@@ -12,6 +14,7 @@ prefix = "test/case/"
 
 main :: IO ()
 main = do
+  setLocaleEncoding utf8
   hspec (runTestCases allTestCases)
   let n = length allTestCases
   putStrLn $ unwords ["A total of", show n, "Coo programs have been evaluated."]
