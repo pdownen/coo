@@ -307,21 +307,27 @@ To manually install these dependencies on Linux, try the following.
 
 ### On Ubuntu / Debian / Mint
 
-> sudo apt install libgmp-dev
-> sudo apt install libncurses5-dev
+```
+sudo apt install libgmp-dev
+sudo apt install libncurses5-dev
+```
 
 This procedure has been tested on a fresh Ubuntu installation, and successfully
 allows `setup.sh` run to completion.
 
 ### On Fedora / RHEL / CentOS
 
-> sudo dnf install gmp-devel
-> sudo dnf install ncurses-devel
+```
+sudo dnf install gmp-devel
+sudo dnf install ncurses-devel
+```
 
 ### On Arch
 
-> sudo pacman -S gmp
-> sudo pacman -S ncurses
+```
+sudo pacman -S gmp
+sudo pacman -S ncurses
+```
 
 
 A Note About Unicode
