@@ -290,6 +290,25 @@ on a short Coo program to ensure that it is working and available.  `setup.hs`
 assumes that you already have GHC and Cabal installed on your system.
 
 
+A Note About Unicode
+--------------------
+
+Some unicode characters are used in printing out certain meta-data when
+displaying the various intermediate representations used by the translation.
+Sometimes, Windows terminals don't display unicode characters correctly by
+default.  This is not an issue for normal evaluation, and should still pass the
+tests checking intermediate representations, but it is not easy to look at.
+
+If you are on a Windows machine, and happen to see what looks like misprinted
+unicode characters when running with the `--dumpdc` option, first try making
+sure that your terminal of choice is properly supporting utf8 encoding.  One way
+to do this globally on Windows is through the "Language & Region" settings page
+(on modern Windows machine, you can search for "Language settings" in the start
+menu).  Expanding "Windows display language" reveals an option "Use Unicode
+UTF-8 for worldwide language support", which enables the expanded character set
+in built-in Windows terminals (like powershell or cmd.exe).
+
+
 Running
 =======
 
