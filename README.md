@@ -797,3 +797,133 @@ pprint : int ~> ()
 run_file : string ~> ()
 exit : {}
 ```
+
+
+Implementation Architecture
+===========================
+
+The Coo programming language implementation (contained in `src/Coo`) is a
+pipeline through multiple phases, organized into the following structure:
+
+1. Coo.Source: Handles the front-end part of the programming language;
+   everything the programmer types and sees.  The input source program is
+   processed in the following steps:
+   
+   1. Coo.Source.Parse: The main parser for the concrete source language syntax,
+      defined using parser combinators (via `megaparsec`).
+   
+   2. Coo.Source.Syntax: Abstract syntax tree data types for the source language
+      syntax, which favors forms as close as possible to the way in which the
+      original program was written.  As such, there are multiple redundant forms
+      here reflecting different options at the source level.
+   
+      * Coo.Source.Print: Pretty printing functions for the source syntax, to
+        display the internal state back to the user.
+   
+   3. Coo.Source.Polarize: The main, source-level, polarity correction
+      algorithm.  This runs before type checking, since it is capable of
+      modifying the original program syntax tree to statically avoid polarity
+      errors; doing so can change the resulting type.  Therefore, a program may
+      only correctly be type checked *after* polarization.
+   
+   4. Coo.Source.TypeCheck: The source-level bidirectional type checker.  This
+      implements an algorithmic version of the simple type system---extended
+      with (equi)recursive types---using strategically-placed type annotations
+      to avoid complex unification goals.
+   
+   5. Coo.Source.Simplify: An (optional) simplification step, that can rewrite
+      the source program into an equivalent form that translates more directly
+      to an efficient and direct-style Dual Core form in the next step.  In
+      particular, the simplification steps here focus on refactoring the form of
+      reactions to map 1-to-1 to Dual Core reactions when possible, by
+      distributing nested clauses and combining adjacent steps into a single
+      (co)pattern match.
+   
+   6. Coo.Source.Desugar: Implements the main translation from the source-level
+      abstract syntax tree into the Dual Core intermediate representation used
+      in the next step.
+
+2. Coo.DualCore:
+
+   1. Coo.DualCore.Syntax: Abstract syntax tree data types for the minimalistic
+      Dual Core intermediate representation.  This syntax avoids redundant forms
+      when possible, and instead requires that everything be written in a single
+      way. *Note:* One exception to this philosophy is admitting both focused
+      and unfocused forms of data structures into the syntax.  This makes the
+      same syntax easy to use as a translation target (where unfocused forms are
+      direct) and a runtime representation (where the focused forms represent
+      real runtime data structures).
+   
+      * Coo.DualCore.Print: Pretty printing functions for the Dual Core syntax,
+        useful when diagnosing internal information via `--dumpdc`.
+   
+      * Coo.DualCore.Sugar: A number of helper patterns that represent
+        "syntactic sugar" directly in the form of nested Dual Core syntax.  This
+        aids the translation step done by `Coo.Source.Desugar` by capturing many
+        of the common patterns that correspond to the original source syntax.
+   
+   2. Coo.DualCore.Polarity: Another (optional) polarity checking and correction
+      step, this time done directly on the Dual Core intermediate
+      representation.  This is currently redundant, since polarity correction
+      must be done at the source level in order to correctly type check the
+      source program as-is to provide reaasonable error messages.  However, when
+      running in a dynamically typed mode (where type checking is disabled),
+      polarity correction can be delayed to this stage without changing the
+      behavior of programs.
+   
+   3. Coo.DualCore.TypeCheck: A secondary type checking algorithm, also
+      implemented in a bidirectional style using directional hints annotating on
+      `go ... to ...` commands as a way to decide the flow of typing information
+      between inference and checking.  This second type system is currently
+      being run during type error and warning modes, and is respondible for the
+      `(internal)` type error messages when only warning about problems.
+   
+   4. Coo.DualCore.Focus: An implementation of the *focusing* aspect of syntax,
+      which sequentializes and names the uncomputed arguments of unfocused data
+      structures.  This can be used as both a static (translation-time)
+      translation or a runtime execution step.  Currently, focusing is
+      exhaustively performed over every input program before it runs.  However,
+      the same functionality is also included in the abstract machine (below) in
+      case it received an unfocused input.
+   
+   5. Coo.DualCore.Run: The main abstract machine, which implements the four
+      beta-reduction rules that execute all programs.
+
+3. Coo.REPL: The implementation of the interactive interpreter, which is also
+   re-used in batch-style for running an entire script file until completion.
+   There is currently only one module.
+
+   1. Coo.REPL.Inside: The inside-out REPL.  This is implemented by inserting
+      the REPL itself as a primitive operation inside the abstract machine.  In
+      other words, to start the REPL, first the abstract machine is loaded with
+      a command that will invoke the REPL as a Dual Core primitive operation.
+      When this step is reached, the user is prompted for more code, which is
+      returned as the next command state to execute, and the machine continues.
+      
+      To ensure a reasonable user interface, there is also support for
+      system-level functionality like handling exceptions---such as when the
+      user aborts a runaway computation---and gracefully restarting the machine
+      at the last stable state.  This file also includes a number of basic
+      primitive operations (such as arithmetic, comparison, input-output) to
+      write simple Coo programs.
+   
+Other utilities include:
+
+1. Coo.Grammar: Additional general utilities used for parsing the source syntax.
+   
+   1. Coo.Lexer: Describes how to break the input into basic types of tokens,
+      manage space and keywords/key-symbols, and (nested block) comments.
+
+   2. Coo.Fixity: Generic helper functions for correctly parsing
+      infix/prefix/postfix operations with customizable precedence and
+      associativity.
+
+2. Coo.Data.Namespace: Utilities for managing different aspects of namespaces.
+   Of note, this includes a data structure for statically reserving a separate
+   namespace usable for internal purposes (such as introducing distinct names
+   for special translation purposes like invisibly binding the current
+   continuation during a function application to push the argument on the stack)
+   which is guaranteed to never conflict with the source name bindings.  Static
+   namespace reservation avoids the need to dynamically generate symbols during
+   translation when the desired identifier names are easily predictable, while
+   still avoiding accidental capture/escape of the programmer's variables.
