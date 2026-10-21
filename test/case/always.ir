@@ -1,27 +1,27 @@
 --- Parsed source code ---
-fun always : int -> rec strm = [ Head : {int} | Tail : strm ]
+fun always : int ~> rec strm = [ Head : {int} | Tail : strm ]
 fun | always x .Head => x
     | always x .Tail => always x
-fun prints : int -> {rec strm = [ Head : {int} | Tail : strm ]} ~> 
+fun prints : int ~> {rec strm = [ Head : {int} | Tail : strm ]} -> 
 fun | prints 0 {_} => 
     | prints n {xs} => do => pprint (xs .Head) go prints (- n 1) {xs .Tail}
 prints 12 {always 9}
 --------------------------
 --- Polarized source code ---
-fun always : int -> rec strm = [ Head : {int} | Tail : strm ]
+fun always : int ~> rec strm = [ Head : {int} | Tail : strm ]
 fun | always x .Head => ⇑ x
     | always x .Tail => always x
-fun prints : int -> {rec strm = [ Head : {int} | Tail : strm ]} ~> 
+fun prints : int ~> {rec strm = [ Head : {int} | Tail : strm ]} -> 
 fun | prints 0 {_} => ⇑ ()
     | prints n {xs} => do => ⇓ pprint (⇓ xs .Head)
                              go prints (⇓ - n 1) {xs .Tail} as CBN : ⇒
 ⇓ prints 12 {always 9}
 -----------------------------
 --- Simplified source code ---
-fun always : int -> rec strm = [ Head : {int} | Tail : strm ]
+fun always : int ~> rec strm = [ Head : {int} | Tail : strm ]
 fun | go always to (x, Head[{\here}]) => go x as CBV : ⇐ to \here
     | always x .Tail => always x
-fun prints : int -> {rec strm = [ Head : {int} | Tail : strm ]} ~> 
+fun prints : int ~> {rec strm = [ Head : {int} | Tail : strm ]} -> 
 fun | go prints to (0, {_}, {\here}) => go  as CBV : ⇐ to \here
     | prints n {xs} => do => ⇓ pprint (⇓ xs .Head)
                              go prints (⇓ - n 1) {xs .Tail} as CBN : ⇒

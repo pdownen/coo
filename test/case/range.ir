@@ -1,8 +1,8 @@
 --- Parsed source code ---
-fun range : (int, int) -> rec r = [ Lower : {int}
+fun range : (int, int) ~> rec r = [ Lower : {int}
 | Upper : {int}
 | Done : {bool}
-| Step : {{r} -> r} -> r ]
+| Step : {{r} ~> r} ~> r ]
 fun range (x, y) | self .Lower => x
                  | self .Upper => y
                  | self .Done => > x y
@@ -10,7 +10,7 @@ fun range (x, y) | self .Lower => x
 fun twentyThirty : rec r = [ Lower : {int}
 | Upper : {int}
 | Done : {bool}
-| Step : {{r} -> r} -> r ]
+| Step : {{r} ~> r} ~> r ]
 fun twentyThirty => range (20, 30)
 pprint ! twentyThirty .Lower
 pprint ! twentyThirty .Upper
@@ -19,10 +19,10 @@ if | twentyThirty .Done => print "range(20,30) is done"
 pprint ! twentyThirty .Step {fn {r} => r} .Lower
 --------------------------
 --- Polarized source code ---
-fun range : (int, int) -> rec r = [ Lower : {int}
+fun range : (int, int) ~> rec r = [ Lower : {int}
 | Upper : {int}
 | Done : {bool}
-| Step : {{r} -> r} -> r ]
+| Step : {{r} ~> r} ~> r ]
 fun range (x, y) | self .Lower => ⇑ x
                  | self .Upper => ⇑ y
                  | self .Done => > x y
@@ -30,7 +30,7 @@ fun range (x, y) | self .Lower => ⇑ x
 fun twentyThirty : rec r = [ Lower : {int}
 | Upper : {int}
 | Done : {bool}
-| Step : {{r} -> r} -> r ]
+| Step : {{r} ~> r} ~> r ]
 fun twentyThirty => range (20, 30)
 ⇓ pprint ! twentyThirty .Lower
 ⇓ pprint ! twentyThirty .Upper
@@ -39,10 +39,10 @@ if | ⇓ twentyThirty .Done => ⇓ print "range(20,30) is done"
 ⇓ pprint ! twentyThirty .Step {fn {r} => r} .Lower
 -----------------------------
 --- Simplified source code ---
-fun range : (int, int) -> rec r = [ Lower : {int}
+fun range : (int, int) ~> rec r = [ Lower : {int}
 | Upper : {int}
 | Done : {bool}
-| Step : {{r} -> r} -> r ]
+| Step : {{r} ~> r} ~> r ]
 fun | go range to ((x, y), Lower[{\here}]) fun self => range (x, y)
                                            => go x as CBV : ⇐ to \here
     | go range to ((x, y), Upper[{\here}]) fun self => range (x, y)
@@ -54,7 +54,7 @@ fun | go range to ((x, y), Lower[{\here}]) fun self => range (x, y)
 fun twentyThirty : rec r = [ Lower : {int}
 | Upper : {int}
 | Done : {bool}
-| Step : {{r} -> r} -> r ]
+| Step : {{r} ~> r} ~> r ]
 fun twentyThirty => range (20, 30)
 ⇓ pprint ! twentyThirty .Lower
 ⇓ pprint ! twentyThirty .Upper

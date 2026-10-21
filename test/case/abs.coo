@@ -1,7 +1,7 @@
-fun : int ~> int;
+fun : int -> int;
 fun negate n = 0 - n;
 
-fun abs : int ~> int;
+fun abs : int -> int;
 fun abs n if
   | n < 0 = negate n
   |       = n;

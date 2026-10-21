@@ -1,9 +1,9 @@
 --- Parsed source code ---
-fun dup : int -> {int, int}
+fun dup : int ~> {int, int}
 fun dup x => x, x
-fun fst : (string, int) ~> string
+fun fst : (string, int) -> string
 fun fst (x, y) => x
-fun snd : (string, int) ~> int
+fun snd : (string, int) -> int
 fun snd (x, y) => y
 val a1 = ("a", 1) : string, int
 print (fst a1)
@@ -15,11 +15,11 @@ pprint ! snd fourByFour
 pprint ! fst (snd (snd (1, 2, 3, 4)))
 --------------------------
 --- Polarized source code ---
-fun dup : int -> {int, int}
+fun dup : int ~> {int, int}
 fun dup x => ⇑ (x, x)
-fun fst : (string, int) ~> string
+fun fst : (string, int) -> string
 fun fst (x, y) => ⇑ x
-fun snd : (string, int) ~> int
+fun snd : (string, int) -> int
 fun snd (x, y) => ⇑ y
 val a1 = ("a", 1) : CBV : string, int
 ⇓ print (⇓ fst a1)
@@ -31,11 +31,11 @@ val fourByFour = ⇓ dup (⇓ dup 4)
 ⇓ pprint ! fst (⇓ snd (⇓ snd (1, 2, 3, 4)))
 -----------------------------
 --- Simplified source code ---
-fun dup : int -> {int, int}
+fun dup : int ~> {int, int}
 fun go dup to (x, {\here}) => go x, x as CBV : ⇐ to \here
-fun fst : (string, int) ~> string
+fun fst : (string, int) -> string
 fun go fst to ((x, y), {\here}) => go x as CBV : ⇐ to \here
-fun snd : (string, int) ~> int
+fun snd : (string, int) -> int
 fun go snd to ((x, y), {\here}) => go y as CBV : ⇐ to \here
 val a1 = ("a", 1) : CBV : string, int
 ⇓ print (⇓ fst a1)

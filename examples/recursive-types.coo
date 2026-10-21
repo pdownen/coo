@@ -6,7 +6,7 @@ val fixed_list = Cons[1, Cons[2, Cons[3, Nil]]]
 val rec_list = Cons[1, Cons[2, Cons[3, Nil]]]
   : rec lst = [Nil | Cons: int, lst];
 
-fun sum : (rec lst = [Nil | Cons: int, lst]) -> {int};
+fun sum : (rec lst = [Nil | Cons: int, lst]) -> int;
 fun | sum Nil        = 0
     | sum Cons[x,xs] = x + sum xs;
 
@@ -20,15 +20,15 @@ fun zeroes : rec strm = [Head: {int} | Tail: strm];
 fun | zeroes.Head = 0
     | zeroes.Tail = zeroes;
 
-fun count : int -> rec strm = [Head: {int} | Tail: strm];
+fun count : int ~> rec strm = [Head: {int} | Tail: strm];
 fun | count(n).Head = n
     | count(n).Tail = count(n+1);
 
 fun nats : rec strm = [Head: {int} | Tail: strm];
 fun nats = count 0;
 
-fun takes : int -> {rec strm = [Head: {int} | Tail: strm]}
-          -> {rec lst = [Nil | Cons: int, lst]};
+fun takes : int ~> {rec strm = [Head: {int} | Tail: strm]}
+          -> rec lst = [Nil | Cons: int, lst];
 fun | takes 0 _    = Nil
     | takes n {xs} = Cons[xs.Head, takes (n-1) {xs.Tail}];
 
@@ -37,18 +37,18 @@ pprint(sum(takes 5 {nats}));
 
 
 fun evens : {rec strm = [Head: {int} | Tail: strm]}
-          -> rec strm = [Head: {int} | Tail: strm];
+          ~> rec strm = [Head: {int} | Tail: strm];
 fun | evens{xs}.Head = xs.Head
     | evens{xs}.Tail = evens{xs.Tail.Tail};
 
 fun odds : {rec strm = [Head: {int} | Tail: strm]}
-          -> rec strm = [Head: {int} | Tail: strm];
+          ~> rec strm = [Head: {int} | Tail: strm];
 fun | odds{xs}.Head = xs.Tail.Head
     | odds{xs}.Tail = odds{xs.Tail.Tail};
 
 fun zigzag : {rec strm = [Head: {int} | Tail: strm]}
-           -> {rec strm = [Head: {int} | Tail: strm]}
-           -> rec strm = [Head: {int} | Tail: strm];
+           ~> {rec strm = [Head: {int} | Tail: strm]}
+           ~> rec strm = [Head: {int} | Tail: strm];
 fun | zigzag {xs} _   .Head      = xs.Head
     | zigzag _    {ys}.Tail.Head = ys.Head
     | zigzag {xs} {ys}.Tail.Tail = zigzag {xs.Tail} {ys.Tail};

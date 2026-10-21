@@ -1,5 +1,5 @@
 fun range : (int, int)
-         -> rec r
+         ~> rec r
           = [ Lower: {int}
             | Upper: {int}
             | Done:  {bool}
@@ -20,11 +20,11 @@ fun oneTen : rec r
            = [ Lower:   {int}
              | Upper:   {int}
              | Done:    {bool}
-             | Collect: {int ~> int} ~> rec lst = [Nil | Cons: int, lst]
-             | Step:    {{r} -> r} -> r ];
+             | Collect: {int -> int} -> rec lst = [Nil | Cons: int, lst]
+             | Step:    {{r} ~> r} ~> r ];
 fun oneTen = collecting{range(1, 10)};
 
-fun print_list : (rec lst = [Nil | Cons: int, lst]) ~> ();
+fun print_list : (rec lst = [Nil | Cons: int, lst]) -> ();
 fun | print_list Nil = ()
     | print_list Cons[x,xs] = do => {
         pprint x;

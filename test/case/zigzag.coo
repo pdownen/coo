@@ -1,21 +1,21 @@
 fun zigzag : {rec strm = [Head: {int} | Tail: strm]}
-          -> {rec strm = [Head: {int} | Tail: strm]}
-          ->  rec strm = [Head: {int} | Tail: strm];
+           , {rec strm = [Head: {int} | Tail: strm]}
+           ~> rec strm = [Head: {int} | Tail: strm];
 fun | zigzag {xs} {ys} .Head      = xs.Head
     | zigzag {xs} {ys} .Tail.Head = ys.Head
     | zigzag {xs} {ys} .Tail.Tail = zigzag {xs.Tail} {ys.Tail};
 
 # Note that recursive types are the same up to renaming (i.e., alpha equivalence)
-fun count : int -> rec stream = [Head: {int} | Tail: stream];
+fun count : int ~> rec stream = [Head: {int} | Tail: stream];
 fun | count(n).Head = n
     | count(n).Tail = count(n+1);
 
-fun repeat : {int ~> int}, int -> rec strm = [Head: {int} | Tail: strm];
+fun repeat : {int -> int}, int ~> rec strm = [Head: {int} | Tail: strm];
 fun repeat {next} where
   | from(x).Head = x
   | from(x).Tail = from(next(x));
 
-fun prints : int -> {rec stream = [Head: {int} | Tail: stream]} ~> ();
+fun prints : int, {rec stream = [Head: {int} | Tail: stream]} -> ();
 fun | prints 0 {_}  = ()
     | prints n {xs} = do => {
         pprint (xs.Head);

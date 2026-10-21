@@ -1,14 +1,14 @@
 # type Stream a = (rec a = [Head: {int} | Tail: {s}])
 
-fun same : bool -> bool ~> bool;
+fun same : bool, bool -> bool;
 fun | same True  True  = True
     | same False False = True
     | same _     _     = False;
 
-fun filterSwap : {int ~> bool}
-               -> {rec s = [Head: {int} | Tail: {{s}}]}
-               -> (rec s = [Head: {int} | Tail: {{s}}])
-                , (rec s = [Head: {int} | Tail: {{s}}]);
+fun filterSwap : {int -> bool}
+               , {rec s = [Head: {int} | Tail: {{s}}]}
+              ~> (rec s = [Head: {int} | Tail: {{s}}])
+               , (rec s = [Head: {int} | Tail: {{s}}]);
 fun filterSwap {p} where
   | go filter {xs} to Head[{this}], that
     = go xs.Head to {this}
@@ -18,13 +18,13 @@ fun filterSwap {p} where
          = go filter {ys} to this, that
        | = go filter {ys} to that, this;
 
-fun prescientFilter : {int ~> bool} -> {rec s = [Head: {int} | Tail: {{s}}]}
-                    ~> {rec s = [Head: {int} | Tail: {{s}}]};
+fun prescientFilter : {int -> bool}, {rec s = [Head: {int} | Tail: {{s}}]}
+                   -> {rec s = [Head: {int} | Tail: {{s}}]};
 fun go prescientFilter {p} {xs} to {start}
   = go filterSwap {p} {xs} to start, start;
 
 
-fun count : int -> rec s = [Head: {int} | Tail: {{s}}];
+fun count : int ~> rec s = [Head: {int} | Tail: {{s}}];
 fun | count(n).Head = n
     | count(n).Tail = {count(n+1)};
 
@@ -36,8 +36,8 @@ val example = prescientFilter
                     | x => x < 5}
                 nats;
 
-fun takes : int -> {rec s = [Head: {int} | Tail: {{s}}]}
-          ~> rec l = [Nil | Cons: int, l];
+fun takes : int, {rec s = [Head: {int} | Tail: {{s}}]}
+         -> rec l = [Nil | Cons: int, l];
 fun | takes 0 {xs} = Nil
     | takes n {xs} = Cons[xs.Head, takes (n-1) (xs.Tail)];
 
@@ -47,7 +47,7 @@ val example4 = takes 4 example;
 val example5 = takes 5 example;
 val example9 = takes 9 example;
 
-fun print_list : (rec lst = [Nil | Cons: int, lst]) ~> ();
+fun print_list : (rec lst = [Nil | Cons: int, lst]) -> ();
 fun | print_list Nil = ()
     | print_list Cons[x,xs] = do => {
         pprint x;

@@ -1,4 +1,4 @@
-fun and_eager : bool -> bool ~> bool;
+fun and_eager : bool, bool -> bool;
 fun and_eager x y if | x = y
                      |   = False;
 

@@ -1,33 +1,33 @@
 --- Parsed source code ---
-fun count : int -> rec stream = [ Head : {int} | Tail : stream ]
+fun count : int ~> rec stream = [ Head : {int} | Tail : stream ]
 fun | count n .Head => n
     | count n .Tail => count (+ n 1)
 fun nats : rec stream = [ Head : {int} | Tail : stream ]
 fun nats => count 0
-fun prints : int, {rec strm = [ Head : {int} | Tail : strm ]} ~> 
+fun prints : int, {rec strm = [ Head : {int} | Tail : strm ]} -> 
 fun | prints 0 {_} => 
     | prints n {xs} => do => pprint (xs .Head) go prints (- n 1) {xs .Tail}
 prints 100 {nats}
 --------------------------
 --- Polarized source code ---
-fun count : int -> rec stream = [ Head : {int} | Tail : stream ]
+fun count : int ~> rec stream = [ Head : {int} | Tail : stream ]
 fun | count n .Head => ⇑ n
     | count n .Tail => count (⇓ + n 1)
 fun nats : rec stream = [ Head : {int} | Tail : stream ]
 fun nats => count 0
-fun prints : int, {rec strm = [ Head : {int} | Tail : strm ]} ~> 
+fun prints : int, {rec strm = [ Head : {int} | Tail : strm ]} -> 
 fun | prints 0 {_} => ⇑ ()
     | prints n {xs} => do => ⇓ pprint (⇓ xs .Head)
                              go prints (⇓ - n 1) {xs .Tail} as CBN : ⇒
 ⇓ prints 100 {nats}
 -----------------------------
 --- Simplified source code ---
-fun count : int -> rec stream = [ Head : {int} | Tail : stream ]
+fun count : int ~> rec stream = [ Head : {int} | Tail : stream ]
 fun | go count to (n, Head[{\here}]) => go n as CBV : ⇐ to \here
     | count n .Tail => count (⇓ + n 1)
 fun nats : rec stream = [ Head : {int} | Tail : stream ]
 fun nats => count 0
-fun prints : int, {rec strm = [ Head : {int} | Tail : strm ]} ~> 
+fun prints : int, {rec strm = [ Head : {int} | Tail : strm ]} -> 
 fun | go prints to (0, {_}, {\here}) => go  as CBV : ⇐ to \here
     | prints n {xs} => do => ⇓ pprint (⇓ xs .Head)
                              go prints (⇓ - n 1) {xs .Tail} as CBN : ⇒

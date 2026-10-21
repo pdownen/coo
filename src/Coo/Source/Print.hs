@@ -209,8 +209,8 @@ prettyComplexTy t = case t of
   RecTy x t   -> pretty "rec" <+> pretty x <+> equals <+> prettyComplexTy t
   UnitTy      -> mempty
   PairTy s t  -> prettyBasicTy s <> comma <+> prettyComplexTy t
-  ArrowTy s t -> prettyBasicTy s <+> pretty "->" <+> prettyComplexTy t
-  ArrDoTy s t -> prettyBasicTy s <+> pretty "~>" <+> prettyComplexTy t
+  ArrowTy s t -> prettyBasicTy s <+> pretty "~>" <+> prettyComplexTy t
+  ArrDoTy s t -> prettyBasicTy s <+> pretty "->" <+> prettyComplexTy t
   _           -> prettyBasicTy t
 
 prettyTagTy x UnitTy = pretty x

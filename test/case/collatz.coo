@@ -1,7 +1,7 @@
-fun even : int ~> bool;
+fun even : int -> bool;
 fun even(n) = n % 2 == 0;
 
-fun collatz : int ~> int;
+fun collatz : int -> int;
 fun collatz(n) = do => {
   if even(n) => go n / 2;
   go n * 3 + 1;

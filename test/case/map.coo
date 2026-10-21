@@ -1,19 +1,19 @@
-fun sum : (rec lst = [Nil | Cons: int, lst]) -> {int};
+fun sum : (rec lst = [Nil | Cons: int, lst]) -> int;
 fun | sum Nil        = 0
     | sum Cons[x,xs] = x + sum xs;
 
-fun range : int -> int ~> rec lst = [Nil | Cons: int, lst];
+fun range : int, int -> rec lst = [Nil | Cons: int, lst];
 fun range x y if
   | x > y = Nil
   |       = Cons[x, range (x+1) y];
 
-fun map : {int ~> int} -> (rec lst = [Nil | Cons: int, lst])
-        ~> rec lst = [Nil | Cons: int, lst];
+fun map : {int -> int}, (rec lst = [Nil | Cons: int, lst])
+       -> rec lst = [Nil | Cons: int, lst];
 fun map {f} where
   | loop Nil        = Nil
   | loop Cons[x,xs] = Cons[f x, loop xs];
 
-fun double : int ~> int;
+fun double : int -> int;
 fun double x = 2*x;
 
 val oneToTen = range 1 10;

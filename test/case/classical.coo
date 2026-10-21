@@ -2,16 +2,16 @@
 # a = int
 # b = bool
 
-# fun callcc : {{a ~> b} ~> a} ~> a;
-fun callcc : {{int ~> bool} ~> int} ~> int;
+# fun callcc : {{a -> b} -> a} -> a;
+fun callcc : {{int -> bool} -> int} -> int;
 fun callcc {h} = do => go h {fn x to k => go x};
 
-fun : bool -> bool ~> bool;
+fun : bool, bool -> bool;
 fun and_eager x y if
   | x = y
   |   = False;
 
-fun : {{bool}} -> {{bool}} ~> bool;
+fun : {{bool}}, {{bool}} -> bool;
 fun and_lazy {x} {y} if
   | x = y
   |   = False;
@@ -56,13 +56,13 @@ pprint ! do => {
 fun angel's_lem : int, {int};
 fun go angel's_lem to x, k = go x to k;
 
-fun identity : int ~> int;
+fun identity : int -> int;
 fun identiy x = x;
 
 # angel's_lem = identity
 pprint(angel's_lem 12);
 pprint(identity 12);
 
-# fun yield : a, {a, {b}} -> {b};
-fun yield : int, {int, {bool}} -> {bool};
+# fun yield : a, {a, {b}} -> b;
+fun yield : int, {int, {bool}} -> bool;
 fun go yield x cxt to k = go (x, k) to cxt;

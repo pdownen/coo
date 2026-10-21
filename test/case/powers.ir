@@ -1,29 +1,29 @@
 --- Parsed source code ---
-fun repeat : {int ~> int}, int -> rec strm = [ Head : {int} | Tail : strm ]
+fun repeat : {int -> int}, int ~> rec strm = [ Head : {int} | Tail : strm ]
 fun repeat {next} | from x .Head => x
                   | from x .Tail => from (next x)
-fun prints : int -> {rec strm = [ Head : {int} | Tail : strm ]} ~> 
+fun prints : int, {rec strm = [ Head : {int} | Tail : strm ]} -> 
 fun | prints 0 {_} => 
     | prints n {xs} => do => pprint (xs .Head) go prints (- n 1) {xs .Tail}
 prints 50 {repeat {fn x => + x x} 1}
 --------------------------
 --- Polarized source code ---
-fun repeat : {int ~> int}, int -> rec strm = [ Head : {int} | Tail : strm ]
+fun repeat : {int -> int}, int ~> rec strm = [ Head : {int} | Tail : strm ]
 fun repeat {next} | from x .Head => ⇑ x
                   | from x .Tail => from (⇓ next x)
-fun prints : int -> {rec strm = [ Head : {int} | Tail : strm ]} ~> 
+fun prints : int, {rec strm = [ Head : {int} | Tail : strm ]} -> 
 fun | prints 0 {_} => ⇑ ()
     | prints n {xs} => do => ⇓ pprint (⇓ xs .Head)
                              go prints (⇓ - n 1) {xs .Tail} as CBN : ⇒
 ⇓ prints 50 {repeat {fn x => + x x} 1}
 -----------------------------
 --- Simplified source code ---
-fun repeat : {int ~> int}, int -> rec strm = [ Head : {int} | Tail : strm ]
+fun repeat : {int -> int}, int ~> rec strm = [ Head : {int} | Tail : strm ]
 fun | go repeat to ({next}, x, Head[{\here}]) fun from => repeat {next}
                                               => go x as CBV : ⇐ to \here
     | repeat {next} x .Tail fun from => repeat {next}
                             => from (⇓ next x)
-fun prints : int -> {rec strm = [ Head : {int} | Tail : strm ]} ~> 
+fun prints : int, {rec strm = [ Head : {int} | Tail : strm ]} -> 
 fun | go prints to (0, {_}, {\here}) => go  as CBV : ⇐ to \here
     | prints n {xs} => do => ⇓ pprint (⇓ xs .Head)
                              go prints (⇓ - n 1) {xs .Tail} as CBN : ⇒

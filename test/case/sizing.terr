@@ -5,13 +5,13 @@ rec r = [ Lower : {int}
 | Upper : {int}
 | Size : {int}
 | Done : {bool}
-| Step : {{r} -> r} -> r ]
+| Step : {{r} ~> r} ~> r ]
 Actual: CBN
 :
 rec r = [ Lower : {int}
 | Upper : {int}
 | Done : {bool}
-| Step : {{r} -> r} -> r ]
+| Step : {{r} ~> r} ~> r ]
 ----------------------------------------
 Type Error (internal): Variable obj used with the wrong type.
 Expected: CBN

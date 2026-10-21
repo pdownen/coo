@@ -1,6 +1,6 @@
 # The naive filter function
-fun : {int ~> bool} -> (rec l = [Nil | Cons: int, l])
-   ~> rec l = [Nil | Cons: int, l];
+fun : {int -> bool}, (rec l = [Nil | Cons: int, l])
+   -> rec l = [Nil | Cons: int, l];
 fun filter {p}
   | loop Nil = Nil
   | loop Cons[x,xs] if
@@ -8,8 +8,8 @@ fun filter {p}
     |     => loop xs;
 
 # The parsimonious filter function
-fun : {int ~> bool} -> (rec l = [Nil | Cons: int, l])
-   -> {rec l = [Nil | Cons: int, l]}, {()};
+fun : {int -> bool}, (rec l = [Nil | Cons: int, l])
+   ~> {rec l = [Nil | Cons: int, l]}, {()};
 fun filterPass {p} where
   | go fp Nil        to {diff}, {same} = go to same
   | go fp Cons[x,xs] to {diff}, {same}
@@ -20,16 +20,16 @@ fun filterPass {p} where
                to {diff},
                   {do () => go xs to diff};
 
-fun : {int ~> bool} -> (rec l = [Nil | Cons: int, l])
-   ~> rec l = [Nil | Cons: int, l];
+fun : {int -> bool}, (rec l = [Nil | Cons: int, l])
+   -> rec l = [Nil | Cons: int, l];
 fun go parsimoniousFilter {p} xs to {start} = {
     val () = filterPass {p} xs {start};
     go xs to start
 };
 
 # A "noisy" version of parsimonious filter that prints its steps
-fun : {int ~> bool} -> (rec l = [Nil | Cons: int, l])
-   -> {rec l = [Nil | Cons: int, l]}, {()};
+fun : {int -> bool}, (rec l = [Nil | Cons: int, l])
+   ~> {rec l = [Nil | Cons: int, l]}, {()};
 fun noisyFilterPass {p} where
   | go fp Nil        to {diff}, {same} = {
        print "End of the list reached; no difference.";
@@ -61,8 +61,8 @@ fun noisyFilterPass {p} where
              };
       };
 
-fun : {int ~> bool} -> (rec l = [Nil | Cons: int, l])
-   ~> rec l = [Nil | Cons: int, l];
+fun : {int -> bool}, (rec l = [Nil | Cons: int, l])
+   -> rec l = [Nil | Cons: int, l];
 fun go noisyParsimoniousFilter {p} xs to {start} = {
     val () = noisyFilterPass {p} xs {start};
     go xs to start
@@ -70,21 +70,21 @@ fun go noisyParsimoniousFilter {p} xs to {start} = {
 
 # Comparing the two different filter functions
 fun equalList : (rec lst = [Nil | Cons: int, lst])
-               , (rec lst = [Nil | Cons: int, lst])
-              ~> bool;
+              , (rec lst = [Nil | Cons: int, lst])
+             -> bool;
 fun | equalList Nil        Nil        = True
     | equalList Cons[x,xs] Cons[y,ys] if
       | x == y                        = equalList xs ys
       |                               = False;
 
-fun printList : (rec lst = [Nil | Cons: int, lst]) ~> ();
+fun printList : (rec lst = [Nil | Cons: int, lst]) -> ();
 fun | printList Nil = ()
     | printList Cons[x,xs] = do => {
         pprint x;
         go printList xs;
       };
 
-fun checkFilters : ({int ~> bool}, rec l = [Nil | Cons: int, l]) ~> ();
+fun checkFilters : ({int -> bool}, rec l = [Nil | Cons: int, l]) -> ();
 fun checkFilters(test, list) = do => {
   val naive = filter test list;
   val parsim = parsimoniousFilter test list;
@@ -104,7 +104,7 @@ fun checkFilters(test, list) = do => {
   go;
 };
 
-fun range : int -> int ~> rec lst = [Nil | Cons: int, lst];
+fun range : int, int -> rec lst = [Nil | Cons: int, lst];
 fun range x y if
   | x > y = Nil
   |       = Cons[x, range (x+1) y];

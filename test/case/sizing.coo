@@ -1,9 +1,9 @@
 fun range : (int, int)
-         -> rec r
+         ~> rec r
           = [ Lower: {int}
             | Upper: {int}
             | Done:  {bool}
-            | Step:  {{r} -> r} -> r ];
+            | Step:  {{r} ~> r} ~> r ];
 fun range(x, y) where
   | self.Lower      = x
   | self.Upper      = y
@@ -14,13 +14,13 @@ fun sizing : { rec r
              = [ Lower: {int}
                | Upper: {int}
                | Done:  {bool}
-               | Step:  {{r} -> r} -> r ] }
-           -> rec r
+               | Step:  {{r} ~> r} ~> r ] }
+           ~> rec r
             = [ Lower: {int}
               | Upper: {int}
               | Size:  {int}
               | Done:  {bool}
-              | Step:  {{r} -> r} -> r ];
+              | Step:  {{r} ~> r} ~> r ];
 fun sizing{obj} where
   | self.Size = self.Upper - self.Lower + 1
   | self      = obj; # Note: This case is not simply typed
@@ -30,7 +30,7 @@ fun twentyThirty : rec r
                    | Upper: {int}
                    | Size:  {int}
                    | Done:  {bool}
-                   | Step:  {{r} -> r} -> r ];
+                   | Step:  {{r} ~> r} ~> r ];
 fun twentyThirty = sizing{range(20,30)};
 
 pprint ! twentyThirty.Lower;

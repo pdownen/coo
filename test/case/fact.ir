@@ -1,5 +1,5 @@
 --- Parsed source code ---
-fun fact : int ~> int
+fun fact : int -> int
 fun | fact 0 => 1
     | fact n => * n (fact (- n 1))
 match 0 with
@@ -8,7 +8,7 @@ where go continue to n | if > n 10 =>
                             go + n 1 to continue
 --------------------------
 --- Polarized source code ---
-fun fact : int ~> int
+fun fact : int -> int
 fun | fact 0 => ⇑ 1
     | fact n => * n (⇓ fact (⇓ - n 1))
 match 0 with
@@ -17,7 +17,7 @@ where go continue to n | if ⇓ > n 10 =>
                             go + n 1 as CBN : ⇒ to ↓ continue
 -----------------------------
 --- Simplified source code ---
-fun fact : int ~> int
+fun fact : int -> int
 fun | go fact to (0, {\here}) => go 1 as CBV : ⇐ to \here
     | fact n => * n (⇓ fact (⇓ - n 1))
 match 0 with

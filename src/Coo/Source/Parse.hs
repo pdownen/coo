@@ -457,7 +457,7 @@ pairTyOp :: Parser (Type -> Type -> Type)
 pairTyOp = comma >> pure PairTy
 
 arrowTyOp :: Parser (Type -> Type -> Type)
-arrowTyOp = ks "->" >> pure ArrowTy
+arrowTyOp = ks "~>" >> pure ArrowTy
 
 arrDoTyOp :: Parser (Type -> Type -> Type)
-arrDoTyOp = ks "~>" >> pure ArrDoTy
+arrDoTyOp = ks "->" >> pure ArrDoTy

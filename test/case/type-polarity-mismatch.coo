@@ -1,4 +1,4 @@
-fun inc : int -> int; # should be either int -> {int} or the shorthand int ~> int
+fun inc : int ~> int; # should be either int ~> {int} or the shorthand int -> int
 fun inc x = x+1;
 
 pprint(0);

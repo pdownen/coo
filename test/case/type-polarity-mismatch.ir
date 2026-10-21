@@ -1,5 +1,5 @@
 --- Parsed source code ---
-fun inc : int -> int
+fun inc : int ~> int
 fun inc x => + x 1
 pprint 0
 pprint (inc 0)
@@ -8,7 +8,7 @@ pprint (inc (inc (inc 0)))
 pprint (inc (inc (inc (inc 0))))
 --------------------------
 --- Polarized source code ---
-fun inc : int -> int
+fun inc : int ~> int
 fun inc x => + x 1
 ⇓ pprint 0
 ⇓ pprint (⇓ inc 0)
@@ -17,7 +17,7 @@ fun inc x => + x 1
 ⇓ pprint (⇓ inc (⇓ inc (⇓ inc (⇓ inc 0))))
 -----------------------------
 --- Simplified source code ---
-fun inc : int -> int
+fun inc : int ~> int
 fun inc x => + x 1
 ⇓ pprint 0
 ⇓ pprint (⇓ inc 0)

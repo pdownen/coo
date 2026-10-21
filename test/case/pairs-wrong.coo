@@ -1,7 +1,7 @@
-fun fst : (string, int) ~> string;
+fun fst : (string, int) -> string;
 fun fst(x, y) = x;
 
-fun snd : (string, int) ~> int;
+fun snd : (string, int) -> int;
 fun snd(x, y) = x;    # x has the wrong type
 
 val a1 = ("a", 1) : (string, int);

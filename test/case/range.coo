@@ -1,9 +1,9 @@
 fun range : (int, int)
-         -> rec r
+         ~> rec r
           = [ Lower: {int}
             | Upper: {int}
             | Done:  {bool}
-            | Step:  {{r} -> r} -> r ];
+            | Step:  {{r} ~> r} ~> r ];
 fun range(x, y) where
   | self.Lower      = x
   | self.Upper      = y
@@ -14,7 +14,7 @@ fun twentyThirty : rec r
                  = [ Lower: {int}
                    | Upper: {int}
                    | Done:  {bool}
-                   | Step:  {{r} -> r} -> r ];
+                   | Step:  {{r} ~> r} ~> r ];
 fun twentyThirty = range(20,30);
 
 pprint ! twentyThirty.Lower;

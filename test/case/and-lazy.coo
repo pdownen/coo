@@ -1,4 +1,4 @@
-fun and_lazy : {{bool}} -> {{bool}} ~> bool;
+fun and_lazy : {{bool}}, {{bool}} -> bool;
 fun and_lazy {x} {y} if | x = y
                         |   = False;
 

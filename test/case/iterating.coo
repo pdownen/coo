@@ -1,5 +1,5 @@
 fun range : (int, int)
-         -> rec r
+         ~> rec r
           = [ Lower: {int}
             | Upper: {int}
             | Done:  {bool}

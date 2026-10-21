@@ -1,10 +1,10 @@
-fun dup : int -> {int, int};
+fun dup : int ~> {int, int};
 fun dup x = (x, x);
 
-fun fst : (string, int) ~> string;
+fun fst : (string, int) -> string;
 fun fst(x, y) = x;
 
-fun snd : (string, int) ~> int;
+fun snd : (string, int) -> int;
 fun snd(x, y) = y;
 
 val a1 = ("a", 1) : (string, int);

@@ -1,4 +1,4 @@
-fun fizzbuzz : int ~> string;
+fun fizzbuzz : int -> string;
 fun fizzbuzz(n) if
   | n%3 == 0 else other = concat "fizz" other
   | n%5 == 0            = "buzz"

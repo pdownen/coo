@@ -17,24 +17,27 @@
 ## Naturally Functional Code ##
 ###############################
 
-fun dup : int -> {int, int};
+fun dup : int ~> {int, int};
 fun dup x = (x, x);
 
-# Note that `a ~> b` is shorthand for the common `a -> {b}`
-# You can read `a ~> b` as "run the code and return `b` after the `a` is passed"
+# `a ~> b` is another way to write a "curried" function,
+# and is equivalent to a function of type `a, b`
 
-fun fst : (int, bool) ~> int;
+# Note that `a -> b` is shorthand for the common `a ~> {b}`
+# You can read `a -> b` as "run the code and return `b` after the `a` is passed"
+
+fun fst : (int, bool) -> int;
 fun fst(x, y) = x;          # cannot be y
 #fun fst(x, y) = y;
 
-fun : (int, bool) ~> bool;  # Repeating the name in the signature is optional
+fun : (int, bool) -> bool;  # Repeating the name in the signature is optional
 fun snd(x, y) = y;          # cannot be x
 #fun snd(x, y) = x;
 
-fun : int ~> int;
+fun : int -> int;
 fun negate n = 0 - n;
 
-fun abs : int ~> int;
+fun abs : int -> int;
 fun abs n if
   | n < 0 = negate n
   |       = n;
@@ -42,7 +45,7 @@ fun abs n if
 val thirty = abs(10 * 3);
 val also_thirty = abs(10 * negate 3);
 
-fun fact : int ~> int;
+fun fact : int -> int;
 fun | fact(0) = 1
     | fact(n) = n * fact(n-1);
 
@@ -53,16 +56,16 @@ val one_hundred_twenty = fact 5;
 ## Shifting Code vs Data ##
 ###########################
 
-fun not : bool ~> bool;
+fun not : bool -> bool;
 fun | not True = False
     | not _    = True;
 
-fun : bool -> bool ~> bool;
+fun : bool ~> bool -> bool;
 fun and_eager x y if
   | x = y
   |   = False;
 
-fun : {{bool}} -> {{bool}} ~> bool;
+fun : {{bool}} ~> {{bool}} -> bool;
 fun and_lazy {x} {y} if
   | x = y
   |   = False;
@@ -92,13 +95,13 @@ val error_averted      = and_lazy  {not(z == 0)} {y / z < 20};  # error averted
 ## Sequential Control ##
 ########################
 
-fun : int ~> int;
+fun : int -> int;
 fun collatz(n) = do => {
     if (n%2 == 0) => go n/2;
     go n*3 + 1;
 };
 
-fun : int ~> int;
+fun : int -> int;
 fun collatz_sequence(n) = do => {
     if (n == 1) => go n;
     pprint n;
@@ -116,8 +119,8 @@ fun collatz_sequence(n) = do => {
 # a = int
 # b = bool
 
-# fun callcc : {{a ~> b} ~> a} ~> a;
-fun callcc : {{int ~> bool} ~> int} ~> int;
+# fun callcc : {{a -> b} -> a} -> a;
+fun callcc : {{int -> bool} -> int} -> int;
 fun callcc {h} = do => go h {fn x to k => go x};
 
 val surprise1 = callcc{fn {k} => do => {
@@ -156,8 +159,8 @@ fun go angel's_lem to x, k = go x to k;
 val pass_through = angel's_lem 3;
 
 
-# fun yield : a, {a, {b}} -> {b};
-fun yield : int, {int, {bool}} -> {bool};
+# fun yield : a, {a, {b}} ~> {b};
+fun yield : int, {int, {bool}} ~> {bool};
 fun go yield x cxt to k = go (x, k) to cxt;
 
 
@@ -165,7 +168,7 @@ fun go yield x cxt to k = go (x, k) to cxt;
 ## Recursive Match ##
 #####################
 
-fun : int -> {};
+fun : int ~> {};
 fun print_evens_until n = do => {
   match 0 as continue with i
   if | i == n => {}
@@ -175,7 +178,7 @@ fun print_evens_until n = do => {
   go;
 };
 
-fun : int ~> int;
+fun : int -> int;
 fun fib(n) = do => {
   if (n < 0) => go n;
   match (0, 1, n) : (int, int, int) as continue with
@@ -189,11 +192,11 @@ fun fib(n) = do => {
 ## Assignment Handlers ##
 #########################
 
-fun : int -> int ~> [Nothing | Just: int];
+fun : int ~> int -> [Nothing | Just: int];
 fun | safeDiv x 0 = Nothing
     | safeDiv x y = Just[x/y];
 
-fun : int -> int ~> [Nothing | Just: int];
+fun : int ~> int -> [Nothing | Just: int];
 fun undoDivide x y = do => {
   val Just[a] = safeDiv x y
       else Nothing => go Nothing;
@@ -205,12 +208,12 @@ fun undoDivide x y = do => {
 };
 
 
-fun : int -> int -> {}, {int};
+fun : int ~> int ~> {}, {int};
 fun go parDiv x y to {err}, {main} if
   | y == 0 = go to err
   |        = go x/y to main;
 
-fun : int -> int ~> [Nothing | Just: int];
+fun : int ~> int -> [Nothing | Just: int];
 fun undoDivide' x y = do => {
   fun err : ();
   fun err = do () => go Nothing;
@@ -227,13 +230,13 @@ fun undoDivide' x y = do => {
 ## Capturing Failure ##
 #######################
 
-fun fizzbuzz : int ~> string;
+fun fizzbuzz : int -> string;
 fun fizzbuzz(n) if
   | n%3 == 0 else other = concat "fizz" other
   | n%5 == 0            = "buzz"
   |                     = "";
 
-fun : int -> {};
+fun : int ~> {};
 fun run_fizzbuzz(n) = do end => {
   match 1 as continue with i => {
     if (i > n) => go to end;
@@ -245,7 +248,7 @@ fun run_fizzbuzz(n) = do end => {
   go to end;
 };
 
-fun : int -> int -> int ~> (int, int);
+fun : int ~> int ~> int -> (int, int);
 fun | divide2 a b else f of 0 => f 10
     | divide2 a else f of 0 c => f 2 c
     | divide2 a b c => (a/b, a/c);

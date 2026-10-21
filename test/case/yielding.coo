@@ -1,16 +1,16 @@
 fun range : (int, int)
-         -> rec r
+         ~> rec r
           = [ Lower: {int}
             | Upper: {int}
             | Done:  {bool}
-            | Step:  {{r} -> r} -> r ];
+            | Step:  {{r} ~> r} ~> r ];
 fun range(x, y) where
   | self.Lower      = x
   | self.Upper      = y
   | self.Done       = x > y
   | self.Step{make} = make{range(x+1, y)};
 
-fun yield : int, {int, {int}} -> {int};
+fun yield : int, {int, {int}} ~> {int};
 fun go yield x {cxt} to k = go (x, k) to cxt;
 
 # Note: yielding is not simply typed
