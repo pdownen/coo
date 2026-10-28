@@ -786,55 +786,55 @@ same operation on floating-point types.
 
 Integer operations:
 ```
-(_ == _) : int, int ~> bool
-(_ /= _) : int, int ~> bool
-(_ >= _) : int, int ~> bool
-(_ =< _) : int, int ~> bool
-(_ > _)  : int, int ~> bool
-(_ < _)  : int, int ~> bool
+(_ == _) : int, int -> bool
+(_ /= _) : int, int -> bool
+(_ >= _) : int, int -> bool
+(_ =< _) : int, int -> bool
+(_ > _)  : int, int -> bool
+(_ < _)  : int, int -> bool
 
-(_ + _) : int, int ~> int
-(_ - _) : int, int ~> int
-(_ * _) : int, int ~> int
-(_ / _) : int, int ~> int
-(_ ^ _) : int, int ~> int
-(_ % _) : int, int ~> int
+(_ + _) : int, int -> int
+(_ - _) : int, int -> int
+(_ * _) : int, int -> int
+(_ / _) : int, int -> int
+(_ ^ _) : int, int -> int
+(_ % _) : int, int -> int
 
-float : int ~> float
+float : int -> float
 ```
 
 Floating-point operations:
 ```
-(_ ==~ _) : float, float ~> bool
-(_ /=~ _) : float, float ~> bool
-(_ >=~ _) : float, float ~> bool
-(_ =<~ _) : float, float ~> bool
-(_ >~ _)  : float, float ~> bool
-(_ <~ _)  : float, float ~> bool
+(_ ==~ _) : float, float -> bool
+(_ /=~ _) : float, float -> bool
+(_ >=~ _) : float, float -> bool
+(_ =<~ _) : float, float -> bool
+(_ >~ _)  : float, float -> bool
+(_ <~ _)  : float, float -> bool
 
-(_ +~ _) : float, float ~> float
-(_ -~ _) : float, float ~> float
-(_ *~ _) : float, float ~> float
-(_ /~ _) : float, float ~> float
-(_ ^~ _) : float, float ~> float
-(_ %~ _) : float, float ~> float
+(_ +~ _) : float, float -> float
+(_ -~ _) : float, float -> float
+(_ *~ _) : float, float -> float
+(_ /~ _) : float, float -> float
+(_ ^~ _) : float, float -> float
+(_ %~ _) : float, float -> float
 
-round   : float ~> int
-floor   : float ~> int
-ceiling : float ~> int
+round   : float -> int
+floor   : float -> int
+ceiling : float -> int
 ```
 
 String operations:
 ```
-concat : string -> string ~> string
+concat : string ~> string -> string
 ```
 
 Input-output operations:
 ```
-print  : string ~> ()
-pprint : int ~> ()
+print  : string -> ()
+pprint : int -> ()
 
-run_file : string ~> ()
+run_file : string -> ()
 exit : {}
 ```
 
