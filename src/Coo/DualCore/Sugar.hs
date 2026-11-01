@@ -133,6 +133,7 @@ pattern LocalElse k c
     c
 
 pattern NoOther   c = LocalAltAs (Check (SameTypeAs (Internal Self))) (Cod []) c
+pattern NoOther0  c = LocalAltAs (Check UnitTy) (Cod []) c
 pattern SkipOther c = LocalAltAs (Check UnitTy) (Abort GoToJoin) c
 
 pattern AndThen c1 c2 = LabelJoinAs (Check UnitTy) (Abort c2) c1

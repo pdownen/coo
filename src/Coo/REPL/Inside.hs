@@ -425,46 +425,53 @@ nextCommand rs = do
 processCommand :: String -> String -> ReplIO ExecCmd
 processCommand place input = do
   rs <- liftReplState get
+  let dumpCore = showInternals (replOptions rs) == ShowInternals
   sc <- replParse place input
-  sp <- replPolar sc
-  let isTyped = typeOption $ replOptions rs
-  st <- typeCheckSource isTyped sp
-  smp <- replSimplify st
-  dc <- replTrans smp
-  dt <- typeCheckCore isTyped dc
-  afterTypeCheck
-  ec <- prepExec dt
-  glob <- get
-  let fc = runFocus (focusCmd ec) (focusing glob)
-  onlyIf (showInternals (replOptions rs) == ShowInternals) $ do
+  onlyIf dumpCore $ do
     liftIO $ putStrLn "--- Parsed source code ---"
     liftIO $ putDoc $ pretty sc <> hardline
     liftIO $ putStrLn "--------------------------"
+  sp <- replPolar sc
+  onlyIf dumpCore $ do
     liftIO $ putStrLn "--- Polarized source code ---"
     liftIO $ putDoc $ pretty sp <> hardline
     liftIO $ putStrLn "-----------------------------"
-    onlyIf (isTyped /= IgnoreTypes) $ do
-      liftIO $ putStrLn "--- Typed source code ---"
-      liftIO $ putDoc $ pretty st <> hardline
-      liftIO $ putStrLn "-------------------------"
+  let isTyped = typeOption $ replOptions rs
+  let dumpTypedCore = dumpCore && isTyped /= IgnoreTypes
+  st <- typeCheckSource isTyped sp
+  onlyIf dumpTypedCore $ do
+    liftIO $ putStrLn "--- Typed source code ---"
+    liftIO $ putDoc $ pretty st <> hardline
+    liftIO $ putStrLn "-------------------------"
+  smp <- replSimplify st
+  onlyIf dumpCore $ do
     liftIO $ putStrLn "--- Simplified source code ---"
     liftIO $ putDoc $ pretty smp <> hardline
     liftIO $ putStrLn "------------------------------"
+  dc <- replTrans smp
+  onlyIf dumpCore $ do
     liftIO $ putStrLn "--- Desugared Dual Core command ---"
     liftIO $ putDoc $ pretty dc <> hardline
     liftIO $ putStrLn "-----------------------------------"
-    onlyIf (isTyped /= IgnoreTypes) $ do
-      liftIO $ putStrLn "--- Typed Dual Core command ---"
-      liftIO $ putDoc $ pretty (preCheckCore dt) <> hardline
-      liftIO $ putStrLn "-------------------------------"
+  dt <- typeCheckCore isTyped dc
+  onlyIf dumpTypedCore $ do
+    liftIO $ putStrLn "--- Typed Dual Core command ---"
+    liftIO $ putDoc $ pretty (preCheckCore dt) <> hardline
+    liftIO $ putStrLn "-------------------------------"
+  afterTypeCheck
+  ec <- prepExec dt
+  onlyIf dumpCore $ do
     liftIO $ putStrLn "--- Executable Dual Core command ---"
     liftIO $ putDoc $ pretty ec <> hardline
     liftIO $ putStrLn "------------------------------------"
+  glob <- get
+  let fc = runFocus (focusCmd ec) (focusing glob)
+  onlyIf dumpCore $ do
     liftIO $ putStrLn "--- Focused Dual Core command ---"
     liftIO $ putDoc $ pretty fc <> hardline
     liftIO $ putStrLn "-----------------------------------"
-    onlyIf (batchOption $ replOptions rs) $ do
-      liftIO exitSuccess
+  onlyIf (dumpCore && batchOption (replOptions rs)) $ do
+    liftIO exitSuccess
   incrementLineno
   captureNextJoin
   return fc

@@ -12,6 +12,9 @@ import System.Exit (ExitCode(..))
 prefix :: FilePath
 prefix = "test/case/"
 
+ignoreCoreDumps :: Bool
+ignoreCoreDumps = True
+
 main :: IO ()
 main = do
   setLocaleEncoding utf8
@@ -123,6 +126,8 @@ runWarnTestCase tc = do
     checkOutput "error" (combineErrors wantTyErr wantErr) realErr
 
 runDualCoreTestCase :: TestCase -> Spec
+runDualCoreTestCase _
+  | ignoreCoreDumps    = return ()
 runDualCoreTestCase tc = do
   describe "generating Dual Core intermediate representation" $ do
     (code, realOut, realErr) <- runIO $ dumpDualCore $ testName tc

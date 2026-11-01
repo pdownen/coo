@@ -93,16 +93,21 @@ desugarStmt' (SetMatch p t (Just (q, u)) handle) c
 desugarStmt' (Case t r) c
   = do t' <- desugarTerm t
        rs' <- desugarReactsTop r
-       c' <- desugarCmd c
-       return $
-         DC.AndThen
-         (DC.SkipOther $ DC.Cut t' (DC.Check DC.CBV, DC.GoTo) (DC.Cod rs'))
-         c'
+       DC.Cut t' (DC.Check DC.CBV, DC.GoTo) (DC.Cod rs')
+         `joinStmt`
+         c
 desugarStmt' (If r) c2
   = do c1 <- desugarGuard r
-       let c1' = DC.SkipOther c1
-       c2' <- desugarCmd c2
-       return $ c1' `DC.AndThen` c2'
+       closeFinalGuard (null c2) <$> c1 `joinStmt` c2
+
+joinStmt :: (DesugarMonad m)
+         => CoreCmd -> Command -> m CoreCmd
+joinStmt c [] = return c
+joinStmt c cs = DC.AndThen (DC.SkipOther c) <$> desugarCmd cs
+
+closeFinalGuard :: Bool -> CoreCmd -> CoreCmd
+closeFinalGuard True  c = DC.NoOther0 c
+closeFinalGuard False c = c
 
 setHandler :: Reaction -> Maybe Reaction -> Reaction
 r `setHandler` Nothing = r

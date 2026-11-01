@@ -286,17 +286,25 @@ elaborateCast :: ElabPole -> TypeCast -> TypeCast
 elaborateCast o (PrefixType _)  = PrefixType $ unelaborateAnnote o
 elaborateCast o (PostfixType _) = PostfixType $ unelaborateAnnote o
 
+terminalStatement stm = case stm of
+  Go _ _ _ -> True
+  If _ -> True
+  Case _ _ -> True
+  -- Run _ -> True
+  _ -> False
+
 elaborateCmd :: (MonadType m) => Command -> m Command
 elaborateCmd [] = do
   expectExtent Partial
   return []
---elaborateCmd [Run u] = do
---  elaborateCmd [Go u Nothing Nothing]
-elaborateCmd (s@(Go _ _ _):_) = do
-  (s', _) <- elaborateStm s
-  return [s']
+elaborateCmd [s]
+  | terminalStatement s = do
+      (s', _) <- assignExtent Whole $ elaborateStm s
+      return [s']
+elaborateCmd (s@(Go _ _ _):_) =
+  elaborateCmd [s]
 elaborateCmd (s:c) = do
-  (s', env) <- elaborateStm s
+  (s', env) <- assignExtent Partial $ elaborateStm s
   c' <- local (env <>) $ elaborateCmd c
   return (s':c')
 
@@ -304,19 +312,24 @@ elaborateStms :: (MonadType m) => [Statement] -> m ([Statement], TyInEnv)
 elaborateStms []    = do
   return ([], mempty)
 elaborateStms (s:c) = do
-  (s', env) <- elaborateStm s
+  (s', env) <- assignExtent Partial $ elaborateStm s
   (c', env') <- local (env <>) $ elaborateStms c
   return (s':c', env' <> env)
 
 elaborateStm :: (MonadType m) => Statement -> m (Statement, TyInEnv)
 elaborateStm s = case s of
   Run t -> do
-    (t', _) <- inferTypeTerm t
-    return (Run t', mempty)
+    ext <- askExtent
+    case ext of
+      _ -> do
+        (t', _) <- inferTypeTerm t
+        return (Run t', mempty)
+      -- Whole -> do
+      --  elaborateStm (Go t Nothing Nothing)
   LocalFun decl r -> case (extractFunName decl r, decl) of
     (Just name, (_, Just t)) -> do
       let pole = CBN ::: t
-      r' <- checkTypeReact Whole pole r
+      r' <- checkTypeExtReact Whole pole r
       let env = TyIn mempty $ M.singleton name pole
       return (LocalFun decl r', env)
     (Nothing, _) ->
@@ -331,15 +344,15 @@ elaborateStm s = case s of
       Nothing  -> return (Nothing, mempty)
       Just cav -> do (cav', _, env') <- inferTypeCaveatBind cav
                      return (Just cav', env')
-    els' <- traverse (checkTypeReact Whole (CBN ::: t)) els
+    els' <- traverse (checkTypeExtReact Whole (CBN ::: t)) els
     return (SetMatch p' u' grd' els', env' <> env)
   If r -> do
-    r' <- checkTypeGuard Partial r
+    r' <- checkTypeGuard r
     return (If r', mempty)
   Case u r -> do
     (u', s ::: t) <- inferTypeTerm u
     expectTermPolarity CBV u' s
-    r' <- checkTypeReact Partial (CBN ::: t) r
+    r' <- checkTypeReact (CBN ::: t) r
     return (Case u' r', mempty)
   Go u a t -> case elaborateAnnote <$> a of
     Just (Check o) -> do
@@ -404,10 +417,10 @@ elaborateTerm mo t = case (mo, t) of
       Nothing -> throwError $ UnhandledTagTerm "project" u table i
     return (u' `Dot` i, ret)
   (Just o, Fn r) -> do
-    r' <- checkTypeReact Whole o r
+    r' <- checkTypeExtReact Whole o r
     return (Fn r', o)
   (Just o, Do r) -> do
-    r' <- checkTypeReact Whole o r
+    r' <- checkTypeExtReact Whole o r
     return (Do r', o)
   -- (Just (s ::: r@(RecTy x r')), _) -> do
   --   (t', s' ::: _) <- elaborateTerm (Just (s ::: substRecTy x r r')) t
@@ -666,7 +679,7 @@ elaborateReact react = case react of
   LetFun decl f r -> case (extractFunName decl r, decl) of
     (Just x, (_, Just t)) -> do
       let pole = CBN ::: t
-      f' <- checkTypeReact Whole pole f
+      f' <- checkTypeExtReact Whole pole f
       r' <- assignType x pole $ elaborateReact r
       return $ LetFun decl f' r'
     (Nothing, _) ->
@@ -684,11 +697,18 @@ elaborateReact react = case react of
     r' <- local (env <>) $ elaborateReact r
     return $ Guard grd' t' r'
 
-checkTypeReact :: (MonadType m) => Extent -> ElabPole -> Reaction -> m Reaction
-checkTypeReact ext o r = assignExtent ext $ assignReactType o $ elaborateReact r
 
-checkTypeGuard :: (MonadType m) => Extent -> Reaction -> m Reaction
-checkTypeGuard ext r = assignExtent ext $ consumeReactType $ elaborateReact r
+checkTypeReact :: (MonadType m) => ElabPole -> Reaction -> m Reaction
+checkTypeReact o r = assignReactType o $ elaborateReact r
+
+checkTypeExtReact :: (MonadType m) => Extent -> ElabPole -> Reaction -> m Reaction
+checkTypeExtReact ext o r = assignExtent ext $ checkTypeReact o r
+
+checkTypeGuard :: (MonadType m) => Reaction -> m Reaction
+checkTypeGuard r = consumeReactType $ elaborateReact r
+
+checkTypeExtGuard :: (MonadType m) => Extent -> Reaction -> m Reaction
+checkTypeExtGuard ext r = assignExtent ext $ checkTypeGuard r
 
 inferTypeCaveatBind :: (MonadType m) => SetCaveat -> m (SetCaveat, ElabPole, TyInEnv)
 inferTypeCaveatBind (match, t) = do
@@ -765,6 +785,13 @@ expectExtent Whole   = return ()
 expectExtent Partial = do
   _ <- checkTypeVar (CBN ::: UnitTy) (Implicit Join)
   return ()
+
+askExtent :: (MonadReader TyInEnv m) => m Extent
+askExtent = do
+  env <- ask
+  case M.lookup (Implicit Join) $ fromCxt env of
+    Nothing -> return Whole
+    Just _  -> return Partial
 
 assignReactType :: (MonadReader TyInEnv m) => ElabPole -> m a -> m a
 assignReactType o@(s ::: a) = assignType (Implicit Self) o
