@@ -21,13 +21,19 @@ import Prettyprinter
 data ElabPole x i = Strat ::: Type x i
   deriving (Show, Eq)
 
-instance (Pretty x, Pretty i) => Pretty (ElabPole x i) where
-  pretty (s ::: t) = sep [pretty s, colon, pretty t]
+data TyGoal x i = Strat ::! TyAnn x i
+  deriving (Show, Eq)
 
-type UnelabPole x i = Dir (ElabPole x i)
+type UnelabPole x i = Dir (TyGoal x i)
 
 type ElabNewPat   x i = Pat i (Trm x i (ElabPole x i)) (Trm x i (ElabPole x i))
 type UnelabNewPat x i = Pat i (Trm x i (UnelabPole x i)) (Trm x i (UnelabPole x i))
+
+instance (Pretty x, Pretty i) => Pretty (ElabPole x i) where
+  pretty (s ::: t) = sep [pretty s, colon, pretty t]
+
+instance (Pretty x, Pretty i) => Pretty (TyGoal x i) where
+  pretty (s ::! a) = sep [pretty s, colon, pretty a]
 
 data PartialType x i = Untyped | Typed (Type x i) | Illtyped [Type x i]
   deriving (Show, Eq, Ord)
@@ -221,8 +227,7 @@ elaborateCmd c@(Cut u p t) = case p of
                 return $ Cut u' o t'
   Infer   -> do (u', o1) <- inferTypeTrm u
                 (t', o2) <- inferTypeCoTrm t
-                same <- comparePoles o1 o2
-                if same
+                if o1 == o2
                   then return $ Cut u' o1 t'
                   else throwError $ MistypedCommand o1 c o2
 
@@ -264,7 +269,7 @@ elaborateTrm Nothing t = throwError $ UntypedTerm t
 -- The following case is redundant:
 -- elaborateTrm (Just o) t          = do
 --   r@(t', o') <- inferTypeTrm t
---   same <- comparePoles o o'
+--   same <- o == o'
 --   if same
 --     then return r
 --     else throwError $ MistypedTerm o t' o'
@@ -311,8 +316,7 @@ elaborateVar p x = do
   cxt <- fromCxt <$> ask
   case (p, M.lookup x cxt) of
     (Just o1, Just o2) -> do
-      same <- comparePoles o1 o2
-      if same
+      if o1 == o2
         then return o1
         else throwError $ MistypedVariable o1 x o2
     (Nothing,    Just o)    -> return o
@@ -338,12 +342,11 @@ checkTypePat :: (Ord x, Ord i,
              -> (Type x i -> a -> m a')
              -> Type x i -> Pat i c a -> m (Pat i c' a')
 checkTypePat cod dat t p = do
-  t' <- normalizeTypeHead t
-  case (t', p) of
+  case (t, p) of
     (_, A a) ->
       A <$> dat t a
-    (ObjTy t', C c) ->
-      C <$> cod t' c
+    (ObjTy t, C c) ->
+      C <$> cod t c
     (UnitTy, MT) ->
       return MT
     (t1 `PairTy` t2, p1 :*: p2) ->
@@ -358,7 +361,7 @@ checkTypePat cod dat t p = do
                       Just p' -> bitraverse (uncurry cod) (uncurry dat) p'
                       Nothing -> throwError $ BadPrimTypePat pty (GenPat p)
         Nothing  -> throwError $ UnknownTypeVar x
-    (RecTy x r, _) -> checkTypePat cod dat (substRecTy x t' r) p
+    (RecTy x r, _) -> checkTypePat cod dat (substRecTy x t r) p
     _ ->
       throwError $ TypePatternMismatch t (GenPat p)
 
@@ -398,12 +401,14 @@ elaborateEnv env = do
 elaborateBound :: (MonadType x i m, Ord x, Ord i)
                => Bound x i (UnelabPole x i) x x
                -> m (Bound x i (ElabPole x i) x x)
-elaborateBound (LetFun (Check o@(_ ::: t)) u) = do
+elaborateBound (LetFun (Check o) u) = do
+  o'@(_ ::: t) <- normalizePole o
   u' <- checkTypeCls t u
-  return $ LetFun o u'
-elaborateBound (LetVal (Check o@(_ ::: t)) v) = do
+  return $ LetFun o' u'
+elaborateBound (LetVal (Check o) v) = do
+  o'@(_ ::: t) <- normalizePole o
   v' <- checkTypeVal t v
-  return $ LetVal o v'
+  return $ LetVal o' v'
 elaborateBound b = throwError $ UnannotatedBinding b
 
 checkTypeRsp :: (MonadType x i m, Ord x, Ord i)
@@ -424,8 +429,7 @@ checkTypePatBind :: (Ord x, Ord i,
                  => Type x i -> Pat i x x -> m (TyInEnv x i)
 checkTypePatBind t p = do
   let bindVar s a x = do
-        a' <- normalizeType a
-        tell $ M.singleton x (s ::: a')
+        tell $ M.singleton x (s ::: a)
   (_, env) <- runWriterT $ checkTypePat (bindVar CBN) (bindVar CBV) t p
   return $ TyIn mempty env
 
@@ -437,8 +441,7 @@ checkTypeCoPatBind t (Nothing :.: p) = do
   checkTypePatBind t p
 checkTypeCoPatBind t (Just x  :.: p) = do
   env <- checkTypePatBind t p
-  t' <- normalizeType t
-  return $ env{fromCxt = M.insert x (CBN ::: t') $ fromCxt env}
+  return $ env{fromCxt = M.insert x (CBN ::: t) $ fromCxt env}
 
 
 weaken :: (Ord x, MonadReader (TyInEnv x i) m)
@@ -449,9 +452,8 @@ assignType :: (Ord x, Ord i,
                MonadReader (TyInEnv x i) m,
                MonadError (TypeError x i) m)
            => x -> (ElabPole x i) -> m a -> m a
-assignType x o m = do
-  o' <- normalizePole o
-  local (\env -> env{fromCxt = M.insert x o' $ fromCxt env}) m
+assignType x o m =
+  local (\env -> env{fromCxt = M.insert x o $ fromCxt env}) m
 
 assignPatType :: (Ord x, Ord i,
                  MonadReader (TyInEnv x i) m,
@@ -475,75 +477,22 @@ expectPolarity expected actual term
   | expected == actual = return ()
   | otherwise          = throwError $ MispolarTerm expected term actual
 
-extractAnnotation :: UnelabPole x i -> Maybe (ElabPole x i)
+extractAnnotation :: UnelabPole x i -> Maybe (TyGoal x i)
 extractAnnotation (Check p) = Just p
 extractAnnotation _         = Nothing
 
 
-normalizeTypeHead :: (Ord x, Ord i,
-                      MonadReader (TyInEnv x i) m,
-                      MonadError (TypeError x i) m)
-                  => Type x i -> m (Type x i)
-normalizeTypeHead (SameTypeAs x) = do
-  env <- fromCxt <$> ask
-  case M.lookup x env of
-    Just (_ ::: t) -> normalizeTypeHead t
-    Nothing        -> throwError $ UntypedVariable x
-normalizeTypeHead t = return t
-
-normalizeType :: (Ord x, Ord i,
-                  MonadReader (TyInEnv x i) m,
-                  MonadError (TypeError x i) m)
-              => Type x i -> m (Type x i)
-normalizeType s = do
-  s' <- normalizeTypeHead s
-  case s' of
-    ObjTy t      -> ObjTy <$> normalizeType t
-    PairTy t1 t2 -> PairTy <$> normalizeType t1 <*> normalizeType t2
-    TagTy xts    -> TagTy <$> traverse normalizeType xts
-    _            -> return s'
-
-compareTypes :: (MonadReader (TyInEnv x i) m,
-                 MonadError (TypeError x i) m,
-                 Ord x, Ord i)
-             => Type x i -> Type x i -> m Bool
-compareTypes a b = do
-  a' <- normalizeType a
-  b' <- normalizeType b
-  return $ a' == b'
-{-
-compareTypes a b = do
-  a' <- normalizeTypeHead a
-  b' <- normalizeTypeHead b
-  case (a', b') of
-    (VarTy x, VarTy y)           -> return $ x == y
-    (UnitTy, UnitTy)             -> return True
-    (ObjTy a1, ObjTy b1)         -> compareTypes a1 b1
-    (PairTy a1 a2, PairTy b1 b2) -> (&&) <$> compareTypes a1 b1 <*> compareTypes a2 b2
-    (TagTy xss, TagTy yts)
-      | M.keys xss /= M.keys yts -> return False
-      | otherwise                -> do
-          parts <- forM (M.toList xss) $ \(x, s) ->
-            case M.lookup x yts of
-              Nothing -> return False
-              Just t  -> compareTypes s t
-          return $ and parts
-    (_, _)                       -> return False
--}
-
 normalizePole :: (Ord x, Ord i,
                   MonadReader (TyInEnv x i) m,
                   MonadError (TypeError x i) m)
-              => ElabPole x i -> m (ElabPole x i)
-normalizePole (s ::: a) = (s :::) <$> normalizeType a
+              => TyGoal x i -> m (ElabPole x i)
+normalizePole (s ::! TypeIs a) = return (s ::: a)
+normalizePole (s ::! TypeOf x) = do
+  env <- fromCxt <$> ask
+  case M.lookup x env of
+    Just (_ ::: t) -> return (s ::: t)
+    Nothing        -> throwError $ UntypedVariable x
 
-comparePoles :: (MonadReader (TyInEnv a i) m,
-                 MonadError (TypeError a i) m,
-                 Ord a, Ord i)
-             => ElabPole a i -> ElabPole a i -> m Bool
-comparePoles (s1 ::: a1) (s2 ::: a2)
-  | s1 /= s2  = return False
-  | otherwise = compareTypes a1 a2
 
 -- Unfold a recursive type one level by substitution.
 --

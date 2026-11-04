@@ -16,7 +16,7 @@ import Control.Monad.Except
 
 import Prettyprinter
 
-type CorePole = (DC.Dir DC.Strat, DC.Dir CoreType)
+type CorePole = (DC.Dir DC.Strat, DC.Dir CoreTyAnn)
 type CoreId = Reserve DC.Label Variable
 type CoreParam = CoreId
 type CoreSelf = Maybe CoreParam
@@ -24,6 +24,7 @@ type CoreLit = Literal
 type CorePat = DC.Pat CoreLit CoreParam CoreParam
 type CoreCoPat = DC.CoPat CoreLit CoreId CoreId
 type CoreType = DC.Type CoreId CoreLit
+type CoreTyAnn = DC.TyAnn CoreId CoreLit
 
 type CoreValue = DC.Val CoreId CoreLit CorePole CoreId CoreId
 type CoreStack = CoreValue
@@ -77,7 +78,11 @@ desugarStmt' (Go u a k) _
 desugarStmt' (Run u) c
   = desugarStmt' (SetMatch (Any (Unbound $ Txt.pack "_")) u Nothing Nothing) c
 desugarStmt' (LocalFun d r) c
-  = annotateFun <$> desugarFunName d r <*> pure (funType d) <*> desugarReactTm r <*> desugarCmd c
+  = annotateFun
+  <$> desugarFunName d r
+  <*> pure (DC.TypeIs <$> funType d)
+  <*> desugarReactTm r
+  <*> desugarCmd c
 desugarStmt' (SetMatch (Any x) t Nothing Nothing) c
   = DC.LocalVal (desugarParam x) <$> desugarTerm t <*> desugarCmd c
 desugarStmt' (SetMatch p t Nothing handle) c
@@ -266,7 +271,7 @@ desugarReactCmd (LetFun d f r)       = do
   x <- desugarFunName d f
   t <- desugarReactTm f
   c <- desugarReactCmd r
-  return $ annotateFun x (funType d) t c
+  return $ annotateFun x (DC.TypeIs <$> funType d) t c
 desugarReactCmd Cede                 = return DC.FallOut
 desugarReactCmd (r1 `Alt` r2)        = do
   c1' <- desugarReactCmd r1
@@ -311,7 +316,7 @@ desugarGuard (LetFun d f r)       = do
   x <- desugarFunName d f
   t <- desugarReactTm f
   c <- desugarGuard r
-  return $ annotateFun x (funType d) t c
+  return $ annotateFun x (DC.TypeIs <$> funType d) t c
 desugarGuard Cede                 = return DC.FallThrough
 desugarGuard (r1 `Alt` r2)        = do
   c1 <- desugarGuard r1
@@ -340,7 +345,7 @@ desugarCast (PostfixType a) = desugarAnn $ Just a
 
 desugarAnn :: Maybe Annotation -> CorePole
 desugarAnn (Just (Annote s t)) = (desugarDir $ desugarStrat <$> s,
-                                  desugarDir $ desugarType  <$> t)
+                                  desugarDir $ DC.TypeIs . desugarType <$> t)
 desugarAnn Nothing             = (DC.Infer, DC.Infer)
 
 desugarDir :: Dir o -> DC.Dir o
@@ -381,6 +386,8 @@ desugarLabel Other     = DC.Other
 desugarLabel Context   = DC.Context
 desugarLabel Unmatched = DC.Unmatched
 
+desugarFunName :: (MonadError DesugarError m)
+               => FunDeclare -> Reaction -> m CoreParam
 desugarFunName d r
   | Just x <- extractFunName d r = return $ desugarParam x
   | otherwise                    = throwError $ UnexpectedSelfless r
@@ -390,7 +397,9 @@ desugarSelfName r
   | Just x <- extractSelfName r = return $ desugarParam x
   | otherwise                   = throwError $ UnexpectedSelfless r
 
+funType :: FunDeclare -> Maybe CoreType
 funType (_, t) = desugarType <$> t
 
+annotateFun :: CoreId -> Maybe CoreTyAnn -> CoreTrm -> CoreCmd -> CoreCmd
 annotateFun x Nothing  = DC.LocalFun x
 annotateFun x (Just t) = DC.LocalFunAs x (DC.Check t)

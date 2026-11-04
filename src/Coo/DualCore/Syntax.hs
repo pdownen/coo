@@ -95,6 +95,11 @@ data Type x i
   | SameTypeAs x
   deriving (Show, Ord)
 
+data TyAnn x i
+  = TypeIs (Type x i)
+  | TypeOf x
+  deriving (Show, Eq, Ord)
+
 data Strat = CBV | CBN
   deriving (Show, Eq, Bounded, Enum)
 

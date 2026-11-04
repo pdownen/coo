@@ -694,7 +694,7 @@ typeCheckCore opt c = do
 
 preCheckCore :: S.CoreCmd -> UntypedCmd
 preCheckCore = fmap merge
-  where merge (Check s, Check a) = Check (s ::: a)
+  where merge (Check s, Check a) = Check (s ::! a)
         merge (GoTo, _) = GoTo
         merge (_, GoTo) = GoTo
         merge (ToGo, _) = ToGo
@@ -703,7 +703,7 @@ preCheckCore = fmap merge
 
 postCheckCore :: TypedCmd -> S.CoreCmd
 postCheckCore = fmap split
-  where split (s ::: a) = (Check s, Check a)
+  where split (s ::: a) = (Check s, Check $ TypeIs a)
 
 afterTypeCheck :: (MonadIO m) => ReplT m ()
 afterTypeCheck = do

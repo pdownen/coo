@@ -87,9 +87,9 @@ pattern Go     t a = Cut t a CtxtVar
 pattern GoHere t a = Cut t a HereVar
 pattern GoJoin t a = Cut t a JoinVar
 
-pattern GoToCont t = Cut NilVal (Check CBV, Check UnitTy) t
+pattern GoToCont t = Cut NilVal (Check CBV, Check (TypeIs UnitTy)) t
 
-pattern GoToJoin = GoJoin NilVal (Check CBV, Check UnitTy)
+pattern GoToJoin = GoJoin NilVal (Check CBV, Check (TypeIs UnitTy))
 
 pattern SetMatchElse p t rs c
   = Cut t (Check CBV, GoTo) (Cod ((NonRecCoPat p :=> c) : rs))
@@ -99,7 +99,7 @@ pattern SetMatch p t c
 
 pattern FallOut = GoHere OtherVar (Check CBN, ToGo)
 
-pattern FallThrough = Cut NilVal (Check CBV, Check UnitTy) OtherVar
+pattern FallThrough = Cut NilVal (Check CBV, Check (TypeIs UnitTy)) OtherVar
 
 pattern LocalValAs x a v c = Cut v (Check CBV, a) (Act x c)
 pattern LocalActAs x a t c = Cut t (Check CBN, a) (Act x c)
@@ -117,8 +117,8 @@ pattern LocalAltAs  a t c = LocalCoActAs (Internal Other) a t c
 pattern LabelJoinAs a k c = LocalCoActAs (Internal Join) a k c
 pattern ReContextAs a k c = LocalValAs (Internal Context) a k c
 
-pattern LocalAlt  t c = LocalAltAs (Check (SameTypeAs (Internal Other))) t c
-pattern LabelJoin k c = LabelJoinAs (Check UnitTy) k c
+pattern LocalAlt  t c = LocalAltAs (Check (TypeOf (Internal Other))) t c
+pattern LabelJoin k c = LabelJoinAs (Check (TypeIs UnitTy)) k c
 pattern ReContext k c = ReContextAs GoTo k c
 
 pattern LocalSelf x k c
@@ -128,15 +128,15 @@ pattern LocalOther k c
   = LocalAct (Internal Other) (DoHere (Cut k (Check CBV, ToGo) OtherVar)) c
 
 pattern LocalElse k c
-  = LocalActAs (Internal Other) (Check UnitTy)
+  = LocalActAs (Internal Other) (Check (TypeIs UnitTy))
                (Abort (Cut k (Check CBV, ToGo) OtherVar))
     c
 
-pattern NoOther   c = LocalAltAs (Check (SameTypeAs (Internal Self))) (Cod []) c
-pattern NoOther0  c = LocalAltAs (Check UnitTy) (Cod []) c
-pattern SkipOther c = LocalAltAs (Check UnitTy) (Abort GoToJoin) c
+pattern NoOther   c = LocalAltAs (Check (TypeOf (Internal Self))) (Cod []) c
+pattern NoOther0  c = LocalAltAs (Check (TypeIs UnitTy)) (Cod []) c
+pattern SkipOther c = LocalAltAs (Check (TypeIs UnitTy)) (Abort GoToJoin) c
 
-pattern AndThen c1 c2 = LabelJoinAs (Check UnitTy) (Abort c2) c1
+pattern AndThen c1 c2 = LabelJoinAs (Check (TypeIs UnitTy)) (Abort c2) c1
 
 pattern Case t rs = Cut t (Check CBV, GoTo) (Cod rs)
 

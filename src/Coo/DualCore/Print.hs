@@ -100,13 +100,17 @@ instance (Pretty o) => Pretty (Dir o) where
 instance Pretty Strat where
   pretty = viaShow
 
+instance (Pretty x, Pretty i) => Pretty (TyAnn x i) where
+  pretty (TypeIs t) = pretty t
+  pretty (TypeOf x) = pretty "typeof" <> parens (pretty x)
+
 instance (Pretty x, Pretty i) => Pretty (Type x i) where
   pretty = prettyComplexTy
 
 prettyBasicTy t = case t of
   VarTy x      -> pretty x
   ObjTy t      -> braces $ pretty t
-  SameTypeAs x -> pretty "typeof" <> parens (pretty x)
+  --SameTypeAs x -> pretty "typeof" <> parens (pretty x)
   TagTy xts    -> encloseSep
     (pretty "[ ") (pretty " ]") (flatAlt (pretty "| ") (pretty " | "))
     [ prettyTagTy x t | (x, t) <- M.toList xts ]
