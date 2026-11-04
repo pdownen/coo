@@ -105,7 +105,7 @@ desugarStmt' (Case t r) c
 desugarStmt' (If r) c2
   = do c1 <- desugarGuard r
        closeFinalGuard (null c2) <$> c1 `joinStmt` c2
-desugarStmt' (TypeDef _ _) c
+desugarStmt' (TypeDef _ _ _) c
   = desugarCmd c
 
 joinStmt :: (DesugarMonad m)
@@ -362,7 +362,8 @@ desugarStrat CBV = DC.CBV
 desugarStrat CBN = DC.CBN
 
 desugarType :: Type -> CoreType
-desugarType (VarTy x)       = DC.VarTy $ desugarTyVar x
+desugarType (VarTy x)       = DC.VarTy (desugarTyVar x)
+desugarType (s `AppTy` t)   = desugarType s `DC.AppTy` desugarType t
 desugarType (RecTy x t)     = DC.RecTy (desugarTyVar x) $ desugarType t
 desugarType UnitTy          = DC.UnitTy
 desugarType (s `PairTy` t)  = desugarType s `DC.PairTy` desugarType t

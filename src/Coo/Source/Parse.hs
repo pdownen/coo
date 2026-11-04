@@ -142,7 +142,7 @@ statement =  Go <$> (go_ *> term)
          <|> Case <$> ((match_ <|> case_) *> term)
                   <*> reactSwitch empty
          <|> If <$> (if_ *> reactIf execsCmd)
-         <|> TypeDef <$> (type_ *> variable) <* equal <*> typ
+         <|> TypeDef <$> (type_ *> variable) <*> many variable <* equal <*> typ
          <|> uncurry SetMatch <$> defVal (takes <|> equal)
                               <*> optional (if_ *> reactCaveat)
                               <*> optional (else_ *> reactWhole)
@@ -453,7 +453,8 @@ tagType = makeTagged <$> literal <*> optional ofType
         makeTagged i (Just t) = (i, t)
 
 coreTyOpTable :: OperationTable Parser Type
-coreTyOpTable = [ rightward
+coreTyOpTable = [ leftward $ infixLOp appTyOp,
+                  rightward
                   $  infixROp pairTyOp
                   <> infixROp arrowTyOp
                   <> infixROp arrDoTyOp ]
@@ -466,3 +467,6 @@ arrowTyOp = ks "~>" >> pure ArrowTy
 
 arrDoTyOp :: Parser (Type -> Type -> Type)
 arrDoTyOp = ks "->" >> pure ArrDoTy
+
+appTyOp :: Parser (Type -> Type -> Type)
+appTyOp = pure AppTy

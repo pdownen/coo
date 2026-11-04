@@ -1,3 +1,4 @@
+{-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -85,7 +86,7 @@ instance Pretty TypeConstraint where
 
 type PrimType = DC.PrimTy CoreId CoreLit
 
-data TypeDefn = PrimTyDef PrimType | UserTyDef Type
+data TypeDefn = PrimTyDef PrimType | UserTyDef [Variable] Type
   deriving (Show)
 
 data TyInEnv  = TyIn { typeCxt :: M.Map Variable  TypeDefn,
@@ -330,8 +331,8 @@ elaborateStms (s:c) = do
 
 elaborateStm :: (MonadType m) => Statement -> m (Statement, TyInEnv)
 elaborateStm s = case s of
-  TypeDef x t -> do
-    let tenv = TyIn (M.singleton x $ UserTyDef t) mempty
+  TypeDef x as t -> do
+    let tenv = TyIn (M.singleton x $ UserTyDef as t) mempty
     env <- ask
     if M.member x (typeCxt env)
       then throwError $ RedefinedType x t
@@ -874,20 +875,30 @@ normalizePoleHead (s ::: t) = (s :::) <$> normalizeTypeHead t
 
 normalizeTypeHead :: (MonadReader TyInEnv m, MonadError TypeError m)
                   => Type -> m Type
-normalizeTypeHead (s `ArrowTy` t)      = return $ s `PairTy` t
-normalizeTypeHead (s `ArrDoTy` t)      = return $ s `PairTy` ObjTy t
-normalizeTypeHead (VarTy (External x)) = do
+normalizeTypeHead t = normalizeTypeHeadApp t []
+
+normalizeTypeHeadApp :: (MonadReader TyInEnv m, MonadError TypeError m)
+                     => Type -> [Type] -> m Type
+normalizeTypeHeadApp (s `AppTy` t)        as = normalizeTypeHeadApp s (t:as)
+normalizeTypeHeadApp (s `ArrowTy` t)      [] = return $ s `PairTy` t
+normalizeTypeHeadApp (s `ArrDoTy` t)      [] = return $ s `PairTy` ObjTy t
+normalizeTypeHeadApp (VarTy (External x)) as = do
   env <- ask
   case M.lookup x (typeCxt env) of
-    Just (UserTyDef t) -> return t
-    Just (PrimTyDef _) -> return $ VarTy $ External x
-    Nothing            -> throwError $ UnknownTypeVar x
-normalizeTypeHead (VarTy (Internal x)) = do
+    Just (UserTyDef ys t)
+      | length as == length ys -> return $ substTys (typeCxt env) sub t
+      where sub = M.fromList [ (External y, a) | y <- ys | a <- as ]
+    Just _  -> return $ reapplyType (VarTy $ External x) as
+    Nothing -> throwError $ UnknownTypeVar x
+normalizeTypeHeadApp (VarTy (Internal x)) _  = do
   throwError $ UnclosedTypeVar x
-normalizeTypeHead t@(RecTy x r)        = do
+normalizeTypeHeadApp t@(RecTy x r)        as = do
   env <- ask
-  normalizeTypeHead (substRecTy (typeCxt env) x t r)
-normalizeTypeHead t                    = return t
+  normalizeTypeHeadApp (substRecTy (typeCxt env) x t r) as
+normalizeTypeHeadApp t                    as = return $ reapplyType t as
+
+reapplyType t []     = t
+reapplyType t (a:as) = reapplyType (t `AppTy` a) as
 
 -- Unfold a recursive type one level by substitution.
 --
@@ -913,6 +924,7 @@ substTys cxt sub t0 = case t0 of
     | Just t' <- M.lookup x sub
                 -> t'
     | otherwise -> t0
+  s `AppTy` t   -> substTys cxt sub s `AppTy` substTys cxt sub t
   UnitTy -> UnitTy
   s `PairTy` t  -> substTys cxt sub s `PairTy` substTys cxt sub t
   s `ArrowTy` t -> substTys cxt sub s `ArrowTy` substTys cxt sub t

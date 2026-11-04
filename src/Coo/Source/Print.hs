@@ -30,16 +30,18 @@ instance Pretty Literal where
   pretty (Tag x) = pretty x
 
 instance Pretty Statement where
-  pretty (Run t)        = pretty t
-  pretty (Go v a t)     = sep $ catMaybes
+  pretty (Run t)         = pretty t
+  pretty (Go v a t)      = sep $ catMaybes
     [ Just $ pretty "go" <+> pretty v,
       (pretty "as" <+>) <$> fmap pretty a,
       (pretty "to" <+>) <$> fmap pretty t ]
-  pretty (TypeDef x t)  = sep [pretty "type", pretty x, pretty "=", pretty t]
-  pretty (LocalFun d r) = prettyFunDeclare d $ pretty "fun" <+> align (prettyReact RecMode r)
-  pretty (If r)         = pretty "if" <+> align (prettyReact GuardMode r)
-  pretty (Case t r)     = align $ vsep [ pretty "match" <+> pretty t <+> pretty "with",
-                                         align (prettyReact WholeMode r) ]
+  pretty (TypeDef x as t) = sep [ pretty "type",
+                                  pretty x, sep $ pretty <$> as,
+                                  pretty "=", pretty t ]
+  pretty (LocalFun d r)  = prettyFunDeclare d $ pretty "fun" <+> align (prettyReact RecMode r)
+  pretty (If r)          = pretty "if" <+> align (prettyReact GuardMode r)
+  pretty (Case t r)      = align $ vsep [ pretty "match" <+> pretty t <+> pretty "with",
+                                          align (prettyReact WholeMode r) ]
   pretty (SetMatch p t grd els)
     = align $ vsep $ catMaybes
       [ Just $ pretty "val" <+> prettyComplexPat p <+> pretty "=" <+> pretty t,
@@ -199,14 +201,15 @@ instance Pretty Type where
   pretty = prettyComplexTy
 
 prettyBasicTy t = case t of
-  VarTy x   -> pretty x
-  ObjTy t   -> braces $ pretty t
-  TagTy xts -> encloseSep
+  VarTy x    -> pretty x
+  ObjTy t    -> braces $ pretty t
+  TagTy xts  -> encloseSep
     (pretty "[ ") (pretty " ]") (flatAlt (pretty "| ") (pretty " | "))
     [ prettyTagTy x t | (x, t) <- xts ]
-  _         -> parens $ prettyComplexTy t
+  _          -> parens $ prettyComplexTy t
 
 prettyComplexTy t = case t of
+  AppTy s t   -> prettyComplexTy s <+> prettyBasicTy t
   RecTy x t   -> pretty "rec" <+> pretty x <+> equals <+> prettyComplexTy t
   UnitTy      -> mempty
   PairTy s t  -> prettyBasicTy s <> comma <+> prettyComplexTy t

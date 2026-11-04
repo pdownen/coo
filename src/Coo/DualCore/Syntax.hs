@@ -1,3 +1,4 @@
+{-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
@@ -89,6 +90,7 @@ data Dir o = GoTo | ToGo | Infer | Check o
 
 data Type x i
   = VarTy (TyVar x)
+  | Type x i `AppTy` Type x i
   | RecTy (TyVar x) (Type x i)
   | UnitTy
   | Type x i `PairTy` Type x i
@@ -259,6 +261,7 @@ mapVarBoundVal f (LetFun o c) = LetFun o (mapVarClsVal f c)
 
 freeTypeVars :: (Ord x) => Type x i -> M.Map (TyVar x) (TyVar x)
 freeTypeVars (VarTy x)      = M.singleton x x
+freeTypeVars (s `AppTy` t)  = freeTypeVars s <> freeTypeVars t
 freeTypeVars (RecTy x t)    = M.delete x $ freeTypeVars t
 freeTypeVars UnitTy         = M.empty
 freeTypeVars (s `PairTy` t) = freeTypeVars s <> freeTypeVars t
@@ -267,9 +270,11 @@ freeTypeVars (ObjTy t)      = freeTypeVars t
 -- freeTypeVars (SameTypeAs _) = M.empty
 
 renameTypeVars :: (Ord x) => M.Map (TyVar x) (TyVar x) -> Type x i -> Type x i
-renameTypeVars sub (VarTy x)      = case M.lookup x sub of
-  Just y  -> VarTy y
-  Nothing -> VarTy x
+renameTypeVars sub (VarTy x)   = VarTy x'
+  where x' = case M.lookup x sub of
+               Just y  -> y
+               Nothing -> x
+renameTypeVars sub (s `AppTy` t)  = renameTypeVars sub s `AppTy` renameTypeVars sub t
 renameTypeVars sub (RecTy x t)
    | M.null sub'                  = RecTy x t
    | otherwise                    = RecTy x $ renameTypeVars sub' t
@@ -285,8 +290,10 @@ openTypeEquality :: (Ord x, Ord i)
                  -> Type x i -> Type x i -> Bool
 openTypeEquality eq s t = case (s, t) of
   (VarTy x, VarTy y) -> case M.lookup x eq of
-    Nothing -> False
     Just z  -> y == z
+    Nothing -> False
+  (s1 `AppTy` s2, t1 `AppTy` t2) ->
+    openTypeEquality eq s1 t1 && openTypeEquality eq s2 t2
   (RecTy x s', RecTy y t') -> openTypeEquality (M.insert x y eq) s' t'
   (ObjTy s', ObjTy t') -> openTypeEquality eq s' t'
   (UnitTy, UnitTy) -> True

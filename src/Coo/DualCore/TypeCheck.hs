@@ -1,3 +1,4 @@
+{-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE RankNTypes #-}
@@ -84,7 +85,7 @@ instance Show (PrimTy x i) where
 
 instance Pretty (PrimTy x i) where
 
-data TypeDefn x i = PrimTyDef (PrimTy x i) | UserTyDef (Type x i)
+data TypeDefn x i = PrimTyDef (PrimTy x i) | UserTyDef [x] (Type x i)
   deriving (Show)
 
 data TyInEnv x i = TyIn { typeCxt :: M.Map x (TypeDefn x i),
@@ -132,6 +133,7 @@ data TypeError x i
   | UnknownTypeVar x
   | UnclosedTypeVar x
   | BadPrimTypePat (PrimTy x i) (GenericPat i)
+  | UnderappliedPatType (GenericPat i) x [Type x i] [x] (Type x i)
   | UnboundConstraints (TyOutEnv x i)
   deriving (Show)
 
@@ -190,6 +192,13 @@ instance (Pretty x, Pretty i) => Pretty (TypeError x i) where
   pretty (BadPrimTypePat t p) = vsep
     [ pretty "The primitive type" <+> pretty t <+> pretty "is incompatible with the pattern:",
       indent 4 $ pretty p ]
+  pretty (UnderappliedPatType p x as ys uty) = vsep
+    [ pretty "The pattern",
+      indent 4 $ pretty p,
+      pretty "cannot have the underapplied type" <+> pretty t <+> pretty "defined as",
+      indent 4 $ def ]
+    where t   = reapplyTypeHead (VarTy $ External x) as
+          def = sep [ pretty "type", pretty x, sep $ pretty <$> ys, pretty "=", pretty uty]
   pretty (UnboundConstraints env) = vsep
     [ pretty "Unbound variables used outside of defining context:",
       indent 4 (pretty env) ]
@@ -342,41 +351,55 @@ checkTypeVar o x = do
   return x
 
 
+checkTypeAppPat :: (Ord x, Ord i,
+                    MonadError (TypeError x i) m,
+                    MonadReader (TyInEnv x i) m)
+                => (Type x i -> c -> m c')
+                -> (Type x i -> a -> m a')
+                -> Type x i -> [Type x i] -> Pat i c a -> m (Pat i c' a')
+checkTypeAppPat cod dat t as p = do
+  case (t, as, p) of
+    (_, _, A a) ->
+      A <$> dat (reapplyTypeHead t as) a
+    (ObjTy t, [], C c) ->
+      C <$> cod t c
+    (UnitTy, [], MT) ->
+      return MT
+    (t1 `PairTy` t2, [], p1 :*: p2) ->
+      (:*:) <$> checkTypePat cod dat t1 p1 <*> checkTypePat cod dat t2 p2
+    (TagTy table, [], j :@: q) -> case M.lookup j table of
+      Just t' -> (j :@:) <$> checkTypePat cod dat t' q
+      Nothing -> throwError $ TagTypeUnhandled j table
+    (VarTy (External x), as, _) -> do
+      cxt <- typeCxt <$> ask
+      case M.lookup x cxt of
+        Just (PrimTyDef pty) -> case (checkPrimPat pty p, as) of
+          (Just p', []) -> bitraverse (uncurry cod) (uncurry dat) p'
+          _             -> throwError $ BadPrimTypePat pty (GenPat p)
+        Just (UserTyDef ys uty)
+          | length ys == length as -> do
+              env <- ask
+              let sub = M.fromList [ (External y, a) | y <- ys | a <- as ]
+              let t' = substTys (typeCxt env) sub uty
+              checkTypePat cod dat t' p
+          | otherwise -> throwError $ UnderappliedPatType (GenPat p) x as ys uty
+        Nothing  -> throwError $ UnknownTypeVar x
+    (VarTy (Internal x), _, _) -> do
+      throwError $ UnclosedTypeVar x
+    (RecTy x r, as, _) -> do
+      env <- ask
+      checkTypeAppPat cod dat (substRecTy (typeCxt env) x t r) as p
+    _ ->
+      throwError $ TypePatternMismatch (reapplyTypeHead t as) (GenPat p)
+
 checkTypePat :: (Ord x, Ord i,
                  MonadError (TypeError x i) m,
                  MonadReader (TyInEnv x i) m)
              => (Type x i -> c -> m c')
              -> (Type x i -> a -> m a')
              -> Type x i -> Pat i c a -> m (Pat i c' a')
-checkTypePat cod dat t p = do
-  case (t, p) of
-    (_, A a) ->
-      A <$> dat t a
-    (ObjTy t, C c) ->
-      C <$> cod t c
-    (UnitTy, MT) ->
-      return MT
-    (t1 `PairTy` t2, p1 :*: p2) ->
-      (:*:) <$> checkTypePat cod dat t1 p1 <*> checkTypePat cod dat t2 p2
-    (TagTy table, j :@: q) -> case M.lookup j table of
-      Just t' -> (j :@:) <$> checkTypePat cod dat t' q
-      Nothing -> throwError $ TagTypeUnhandled j table
-    (VarTy (External x), _) -> do
-      cxt <- typeCxt <$> ask
-      case M.lookup x cxt of
-        Just (PrimTyDef pty) -> case checkPrimPat pty p of
-          Just p' -> bitraverse (uncurry cod) (uncurry dat) p'
-          Nothing -> throwError $ BadPrimTypePat pty (GenPat p)
-        Just (UserTyDef uty) -> do
-          checkTypePat cod dat uty p
-        Nothing  -> throwError $ UnknownTypeVar x
-    (VarTy (Internal x), _) -> do
-      throwError $ UnclosedTypeVar x
-    (RecTy x r, _) -> do
-      env <- ask
-      checkTypePat cod dat (substRecTy (typeCxt env) x t r) p
-    _ ->
-      throwError $ TypePatternMismatch t (GenPat p)
+checkTypePat cod dat t p = checkTypeAppPat cod dat s as p
+  where (s, as) = unapplyTypeHead t
 
 checkTypeNewPat :: (MonadType x i m, Ord x, Ord i)
                 => Type x i
@@ -506,6 +529,15 @@ normalizePole (s ::! TypeOf x) = do
     Just (_ ::: t) -> return (s ::: t)
     Nothing        -> throwError $ UntypedVariable x
 
+unapplyTypeHead :: Type x i -> (Type x i, [Type x i])
+unapplyTypeHead t = go t []
+  where go (s `AppTy` t) as = go s (t:as)
+        go t             as = (t, as)
+
+reapplyTypeHead :: Type x i -> [Type x i] -> Type x i
+reapplyTypeHead t []     = t
+reapplyTypeHead t (a:as) = reapplyTypeHead (t `AppTy` a) as
+
 
 -- Unfold a recursive type one level by substitution.
 --
@@ -534,7 +566,8 @@ substTys cxt sub t0 = case t0 of
     | Just t' <- M.lookup x sub
                 -> t'
     | otherwise -> t0
-  UnitTy -> UnitTy
+  s `AppTy` t   -> substTys cxt sub s `AppTy` substTys cxt sub t
+  UnitTy        -> UnitTy
   s `PairTy` t  -> substTys cxt sub s `PairTy` substTys cxt sub t
   TagTy its     -> TagTy (substTys cxt sub <$> its)
   ObjTy t       -> ObjTy (substTys cxt sub t)

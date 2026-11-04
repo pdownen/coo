@@ -261,7 +261,7 @@ polarizeCaveat (p, t) = (p,) <$> polarizeTerm CBV t
 
 polarizeStmt :: (MonadPolar m) => Statement -> m Statement
 polarizeStmt (Run t)                = Run <$> polarizeTerm CBV t
-polarizeStmt (TypeDef x t)          = return $ TypeDef x t
+polarizeStmt (TypeDef x as t)       = return $ TypeDef x as t
 polarizeStmt (LocalFun d r)         = case extractFunName d r of
   Just x  -> bindPolarity x CBN $ LocalFun d <$> polarizeReact CBN r
   Nothing -> LocalFun d <$> polarizeReact CBN r

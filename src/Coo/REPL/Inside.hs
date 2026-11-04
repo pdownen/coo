@@ -315,8 +315,8 @@ desugarTyInEnv (S.TyIn tyds vars) = DC.TyIn tyds' vars'
                            | (x, s S.::: t) <- M.toList vars ]
 
 desugarTypeDefn :: S.TypeDefn -> DC.TypeDefn S.CoreId S.Literal
-desugarTypeDefn (S.PrimTyDef pty) = DC.PrimTyDef pty
-desugarTypeDefn (S.UserTyDef uty) = DC.UserTyDef $ S.desugarType uty
+desugarTypeDefn (S.PrimTyDef pty)    = DC.PrimTyDef pty
+desugarTypeDefn (S.UserTyDef xs uty) = DC.UserTyDef (External <$> xs) $ S.desugarType uty
 
 defaultOptions :: ReplOptions
 defaultOptions = RO { typeOption  = IgnoreTypes,

@@ -42,7 +42,7 @@ data Statement
   | SetMatch Pattern Term (Maybe SetCaveat) (Maybe Reaction)
   | If Reaction
   | Case Term Reaction
-  | TypeDef Variable Type
+  | TypeDef Variable [Variable] Type
   deriving (Show)
 
 type FunDeclare = (Maybe Variable, Maybe Type)
@@ -132,6 +132,7 @@ opStrat CBN = CBV
 
 data Type
   = VarTy TyVar
+  | Type `AppTy` Type
   | RecTy TyVar Type
   | UnitTy
   | Type `PairTy` Type
@@ -300,6 +301,7 @@ desugarTopArrowTy t               = t
 
 freeTypeVars :: Type -> M.Map TyVar TyVar
 freeTypeVars (VarTy x)       = M.singleton x x
+freeTypeVars (AppTy s t)     = freeTypeVars s <> freeTypeVars t
 freeTypeVars (RecTy x t)     = M.delete x $ freeTypeVars t
 freeTypeVars UnitTy          = M.empty
 freeTypeVars (s `PairTy`  t) = freeTypeVars s <> freeTypeVars t
@@ -312,8 +314,10 @@ openTypeEquality :: M.Map TyVar TyVar
                  -> Type -> Type -> Bool
 openTypeEquality eq s t = case (desugarTopArrowTy s, desugarTopArrowTy t) of
   (VarTy x, VarTy y) -> case M.lookup x eq of
-    Nothing -> False
     Just  z -> y == z
+    Nothing -> False
+  (s1 `AppTy` s2, t1 `AppTy` t2) ->
+    openTypeEquality eq s1 t1 && openTypeEquality eq s2 t2
   (RecTy x s', RecTy y t') -> openTypeEquality (M.insert x y eq) s' t'
   (ObjTy s', ObjTy t') -> openTypeEquality eq s' t'
   (UnitTy, UnitTy) -> True
