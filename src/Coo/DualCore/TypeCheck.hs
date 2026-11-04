@@ -6,6 +6,7 @@ module Coo.DualCore.TypeCheck where
 import Coo.DualCore.Syntax
 import Coo.DualCore.Print ()
 import Coo.DualCore.Polarity (Unified (..))
+import Coo.Data.Namespace
 
 import qualified Data.Text as Txt
 import qualified Data.Map as M
@@ -354,14 +355,16 @@ checkTypePat cod dat t p = do
     (TagTy table, j :@: q) -> case M.lookup j table of
       Just t' -> (j :@:) <$> checkTypePat cod dat t' q
       Nothing -> throwError $ TagTypeUnhandled j table
-    (VarTy x, _) -> do
+    (VarTy (External x), _) -> do
       cxt <- typeCxt <$> ask
       case M.lookup x cxt of
         Just pty -> case checkPrimPat pty p of
                       Just p' -> bitraverse (uncurry cod) (uncurry dat) p'
                       Nothing -> throwError $ BadPrimTypePat pty (GenPat p)
         Nothing  -> throwError $ UnknownTypeVar x
-    (RecTy x r, _) -> checkTypePat cod dat (substRecTy x t r) p
+    (RecTy x r, _) -> do
+      env <- ask
+      checkTypePat cod dat (substRecTy (typeCxt env) x t r) p
     _ ->
       throwError $ TypePatternMismatch t (GenPat p)
 
@@ -496,22 +499,44 @@ normalizePole (s ::! TypeOf x) = do
 
 -- Unfold a recursive type one level by substitution.
 --
--- Invariant: Recursive types are (externally) closed; their body has only one
--- free variable, which is the recursively bound free variable.  Therefore,
--- naive substitution is sound.
-substRecTy :: (Eq x) => x -> Type x i -> Type x i -> Type x i
-substRecTy x r t0 = case t0 of
-  VarTy y
-    | x == y    -> r
-    | otherwise -> t0
-  UnitTy        -> UnitTy
-  s `PairTy` t  -> substRecTy x r s `PairTy` substRecTy x r t
-  TagTy its     -> TagTy (substRecTy x r <$> its)
-  ObjTy t       -> ObjTy (substRecTy x r t)
-  RecTy y u     -> RecTy y (substRecTy x r u)
-  SameTypeAs x  -> SameTypeAs x
+-- Invariant: All types can only have `External` free type variables in them,
+-- which must be found in the `TyInCxt` (specifically, the `typeCxt` field).
+-- All occurrence of `Internal` variables must be locally bound within the type
+-- (e.g., by a `rec \x = ...`).
+--
+-- Therefore, the only counter-example to naive substitution is when a local
+-- binding of a type variable (from the external namespace) shadows something
+-- visible in the global type context (`typeCxt`).  The type that is inserted
+-- underneath that binding might have free references to that variable in the
+-- global context that would get captured by the local binding.  To avoid the
+-- capture, we can perform one step of freshening by moving the locally bound
+-- type variable from the external namespace into the internal one, and update
+-- all references to it simultaneously during substitution.
+substRecTy :: (Ord x) => M.Map x a
+           -> TyVar x -> Type x i
+           -> Type x i -> Type x i
+substRecTy cxt x r t0 = substTys cxt (M.singleton x r) t0
 
-openUnionTy :: (Ord x, Ord i) => M.Map x x -> Type x i -> Type x i -> Maybe (Type x i)
+substTys :: (Ord x) => M.Map x a -> M.Map (TyVar x) (Type x i)
+         -> Type x i -> Type x i
+substTys cxt sub t0 = case t0 of
+  VarTy x
+    | Just t' <- M.lookup x sub
+                -> t'
+    | otherwise -> t0
+  UnitTy -> UnitTy
+  s `PairTy` t  -> substTys cxt sub s `PairTy` substTys cxt sub t
+  TagTy its     -> TagTy (substTys cxt sub <$> its)
+  ObjTy t       -> ObjTy (substTys cxt sub t)
+  RecTy (External x) u
+    | M.member x cxt
+                -> RecTy (Internal x) (substTys cxt sub' u)
+    where sub' = M.insert (External x) (VarTy $ Internal x) sub
+  RecTy x u     -> RecTy x (substTys cxt sub u)
+
+openUnionTy :: (Ord x, Ord i)
+            => M.Map (TyVar x) (TyVar x)
+            -> Type x i -> Type x i -> Maybe (Type x i)
 openUnionTy eq s t = case (s, t) of
   (VarTy x, VarTy y) -> do
     z <- M.lookup x eq
@@ -533,11 +558,13 @@ openUnionTy eq s t = case (s, t) of
           mergeWithLeft x s' = case M.lookup x xss of
             Just t' -> openUnionTy eq s' t'
             Nothing -> Just s'
-  (SameTypeAs x, SameTypeAs y)
-    | x == y -> Just (SameTypeAs y)
+--  (SameTypeAs x, SameTypeAs y)
+--    | x == y -> Just (SameTypeAs y)
   (_, _) -> Nothing
 
-openIntersectTy :: (Ord x, Ord i) => M.Map x x -> Type x i -> Type x i -> Maybe (Type x i)
+openIntersectTy :: (Ord x, Ord i)
+                => M.Map (TyVar x) (TyVar x)
+                -> Type x i -> Type x i -> Maybe (Type x i)
 openIntersectTy eq s t = case (s, t) of
   (VarTy x, VarTy y) -> do
     z <- M.lookup x eq
@@ -556,8 +583,8 @@ openIntersectTy eq s t = case (s, t) of
     TagTy <$> sequence (M.intersectionWith common (Just <$> xss) (Just <$> yts))
     where common (Just l) (Just r) = openIntersectTy eq l r
           common _        _        = Nothing
-  (SameTypeAs x, SameTypeAs y)
-    | x == y -> Just (SameTypeAs y)
+--  (SameTypeAs x, SameTypeAs y)
+--    | x == y -> Just (SameTypeAs y)
   (_, _) -> Nothing
 
 partialUnionTy :: (Ord x, Ord i) => Type x i -> Type x i -> Maybe (Type x i)

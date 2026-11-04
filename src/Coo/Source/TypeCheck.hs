@@ -13,6 +13,8 @@ import Coo.Source.Desugar
 import qualified Coo.DualCore.Syntax as DC
 import qualified Coo.DualCore.TypeCheck as DC
 
+import Coo.Data.Namespace
+
 import qualified Data.Map as M
 import Control.Monad.Identity
 import Control.Monad.Reader
@@ -394,24 +396,27 @@ isInferrableTerm _           = False
 
 elaborateTerm :: (MonadType m) => Maybe ElabPole -> Term -> m (Term, ElabPole)
 elaborateTerm mo t = case (mo, t) of
-  (Just (CBV ::: VarTy x), Make i Nil) -> do
+  (Just (CBV ::: a@(VarTy (External x))), Make i Nil) -> do
     j <- checkTypePrimLit x i
-    return (Make j Nil, CBV ::: VarTy x)
+    return (Make j Nil, CBV ::: a)
   (_, Var x) -> do
     o' <- elaborateVar mo x
     return (t, o')
   (Nothing, u `App` v) -> do
     (u', o) <- inferTypeTerm u
-    (arg, ret) <- case normalizePoleHead o of
-      (CBN ::: (arg `PairTy` ret))  -> return (CBV ::: arg, CBN ::: ret)
-      _                             -> throwError $ MistypedElim t "function application" u' o
+    (arg, ret) <- do
+      o' <- normalizePoleHead o
+      case o' of
+        (CBN ::: (arg `PairTy` ret))  -> return (CBV ::: arg, CBN ::: ret)
+        _ -> throwError $ MistypedElim t "function application" u' o
     v' <- checkTypeTerm arg v
     return (u' `App` v', ret)
   (Nothing, u `Dot` i) -> do
     (u', o) <- inferTypeTerm u
-    table <- case normalizePoleHead o of
+    o' <- normalizePoleHead o
+    table <- case o' of
       (CBN ::: TagTy table) -> return table
-      _                     -> throwError $ MistypedElim t "projection" u' o
+      _ -> throwError $ MistypedElim t "projection" u' o
     ret <- case lookup i table of
       Just ty -> return (CBN ::: ty)
       Nothing -> throwError $ UnhandledTagTerm "project" u table i
@@ -425,27 +430,35 @@ elaborateTerm mo t = case (mo, t) of
   -- (Just (s ::: r@(RecTy x r')), _) -> do
   --   (t', s' ::: _) <- elaborateTerm (Just (s ::: substRecTy x r r')) t
   --   return (t', s' ::: r)
-  (Just o, Nil) -> case normalizePoleHead o of
-    (CBV ::: UnitTy) -> return (Nil, o)
-    _                -> throwError $ MistypedIntro t "an empty tuple" o
-  (Just o, u1 `Pair` u2) -> case normalizePoleHead o of
-    (CBV ::: (a1 `PairTy` a2)) -> do
-      u1' <- checkTypeTerm (CBV ::: a1) u1
-      u2' <- checkTypeTerm (CBV ::: a2) u2
-      return ((u1' `Pair` u2'), o)
-    _                          -> throwError $ MistypedIntro t "a pair" o
-  (Just o, Make i u) -> case normalizePoleHead o of
-    (CBV ::: TagTy table)
-      | Just a_i <- lookup i table -> do
-          u' <- checkTypeTerm (CBV ::: a_i) u
-          return (Make i u', o)
-      | otherwise -> throwError $ UnhandledTagTerm "make" t table i
-    _             -> throwError $ MistypedIntro t "a tagged value" o
-  (Just o, Obj u) -> case normalizePoleHead o of
-    (CBV ::: ObjTy a) -> do
-      u' <- checkTypeTerm (CBN ::: a) u
-      return (Obj u', o)
-    _                 -> throwError $ MistypedIntro t "a closure value" o
+  (Just o, Nil) -> do
+    o' <- normalizePoleHead o
+    case o' of
+      (CBV ::: UnitTy) -> return (Nil, o)
+      _                -> throwError $ MistypedIntro t "an empty tuple" o
+  (Just o, u1 `Pair` u2) -> do
+    o' <- normalizePoleHead o
+    case o' of
+      (CBV ::: (a1 `PairTy` a2)) -> do
+        u1' <- checkTypeTerm (CBV ::: a1) u1
+        u2' <- checkTypeTerm (CBV ::: a2) u2
+        return ((u1' `Pair` u2'), o)
+      _                          -> throwError $ MistypedIntro t "a pair" o
+  (Just o, Make i u) -> do
+    o' <- normalizePoleHead o
+    case o' of
+      (CBV ::: TagTy table)
+        | Just a_i <- lookup i table -> do
+            u' <- checkTypeTerm (CBV ::: a_i) u
+            return (Make i u', o)
+        | otherwise -> throwError $ UnhandledTagTerm "make" t table i
+      _             -> throwError $ MistypedIntro t "a tagged value" o
+  (Just o, Obj u) -> do
+    o' <- normalizePoleHead o
+    case o' of
+      (CBV ::: ObjTy a) -> do
+        u' <- checkTypeTerm (CBN ::: a) u
+        return (Obj u', o)
+      _                 -> throwError $ MistypedIntro t "a closure value" o
   (Nothing, Obj u) -> do
     (u', s ::: a) <- inferTypeTerm u
     expectTermPolarity CBN u' s
@@ -456,14 +469,16 @@ elaborateTerm mo t = case (mo, t) of
     return (Call u', o)
   (Nothing, Call u) -> do
     (u', o) <- inferTypeTerm u
-    o' <- case normalizePoleHead o of
-            (CBN ::: ObjTy a) -> return (CBV ::: a)
-            _                 -> throwError $ MistypedElim t "strict (!) call" u' o
-    return (Call u', o')
+    o' <- normalizePoleHead o
+    o'' <- case o' of
+             (CBN ::: ObjTy a) -> return (CBV ::: a)
+             _                 -> throwError $ MistypedElim t "strict (!) call" u' o
+    return (Call u', o'')
   (Just (s ::: a), Shift ps u) -> do
     expectTermPolarity s t (shiftTo ps)
     let isIntro = ps == PS CBV Me || ps == PS CBN You
-    a' <- case (isIntro, normalizeTypeHead a) of
+    a_n <- normalizeTypeHead a
+    a' <- case (isIntro, a_n) of
             (False, _)       -> return $ ObjTy a
             (True, ObjTy a') -> return a'
             (True, _)        -> throwError $ MistypedIntro t "a shift" (s ::: a)
@@ -473,7 +488,8 @@ elaborateTerm mo t = case (mo, t) of
     (u', s ::: a) <- inferTypeTerm u
     expectTermPolarity (opStrat $ shiftTo ps) u s
     let isElim = ps == PS CBV You || ps == PS CBN Me
-    a' <- case (isElim, normalizeTypeHead a) of
+    a_n <- normalizeTypeHead a
+    a' <- case (isElim, a_n) of
             (False, _)       -> return $ ObjTy a
             (True, ObjTy a') -> return a'
             _                -> throwError $ MistypedElim t "shift" u (s ::: a)
@@ -661,19 +677,23 @@ elaborateReact react = case react of
     return $ Rec q' r'
   Pop p r -> do
     o <- inferTypeVar (Implicit Self)
-    (arg, ret) <- case normalizePoleHead o of
-      CBN ::: PairTy arg ret  -> return (arg, ret)
-      _                       -> throwError $ MistypedPop o p r
+    (arg, ret) <- do
+      o' <- normalizePoleHead o
+      case o' of
+        CBN ::: PairTy arg ret  -> return (arg, ret)
+        _                       -> throwError $ MistypedPop o p r
     (p', env) <- checkTypePatBind arg p
     r' <- local (env <>) $ assignReactType (CBN ::: ret) $ elaborateReact r
     return $ Pop p' r'
   Proj i r -> do
     o <- inferTypeVar (Implicit Self)
-    a_i <- case normalizePoleHead o of
-      CBN ::: TagTy table -> case lookup i table of
-        Just a_i          -> return a_i
-        Nothing           -> throwError $ UnhandledTagReact i r table
-      _                   -> throwError $ MistypedProj o i r
+    a_i <- do
+      o' <- normalizePoleHead o
+      case o' of
+        CBN ::: TagTy table -> case lookup i table of
+          Just a_i          -> return a_i
+          Nothing           -> throwError $ UnhandledTagReact i r table
+        _                   -> throwError $ MistypedProj o i r
     r' <- assignReactType (CBN ::: a_i) $ elaborateReact r
     return $ Proj i r'
   LetFun decl f r -> case (extractFunName decl r, decl) of
@@ -722,27 +742,30 @@ inferTypeCaveatBind (match, t) = do
 
 checkTypePatBind :: (MonadReader TyInEnv m, MonadError TypeError m)
                  => Type -> Pattern -> m (Pattern, TyInEnv)
-checkTypePatBind t p = case (normalizeTypeHead t, p) of
-  (VarTy x,        Made i IsNil)   -> do
-    j <- checkTypePrimLit x i
-    return (Made j IsNil, mempty)
-  (_,              Any x)          -> do
-    return (Any x, TyIn mempty $ M.singleton x (CBV ::: t))
-  (ObjTy t',       IsObj x)        -> do
-    return (IsObj x, TyIn mempty $ M.singleton x (CBN ::: t'))
-  (UnitTy,         IsNil)          -> do
-    return (IsNil, mempty)
-  (t1 `PairTy` t2, p1 `IsPair` p2) -> do
-    (p1', env1) <- checkTypePatBind t1 p1
-    (p2', env2) <- checkTypePatBind t2 p2
-    return (p1' `IsPair` p2', env2 <> env1)
-  (TagTy table,    Made i p_i)     -> case lookup i table of
-    Just t_i -> do (p_i', env) <- checkTypePatBind t_i p_i
-                   return (Made i p_i', env)
-    Nothing  -> throwError $ UnhandledTagPat i p_i table
-  (RecTy x r, _)                   -> do
-    checkTypePatBind (substRecTy x t r) p
-  _                                -> throwError $ MistypedPat p t
+checkTypePatBind t p = do
+  t_n <- normalizeTypeHead t
+  case (t_n, p) of
+    (VarTy (External x), Made i IsNil)   -> do
+      j <- checkTypePrimLit x i
+      return (Made j IsNil, mempty)
+    (_, Any x)          -> do
+      return (Any x, TyIn mempty $ M.singleton x (CBV ::: t))
+    (ObjTy t', IsObj x)        -> do
+      return (IsObj x, TyIn mempty $ M.singleton x (CBN ::: t'))
+    (UnitTy, IsNil)          -> do
+      return (IsNil, mempty)
+    (t1 `PairTy` t2, p1 `IsPair` p2) -> do
+      (p1', env1) <- checkTypePatBind t1 p1
+      (p2', env2) <- checkTypePatBind t2 p2
+      return (p1' `IsPair` p2', env2 <> env1)
+    (TagTy table, Made i p_i)     -> case lookup i table of
+      Just t_i -> do (p_i', env) <- checkTypePatBind t_i p_i
+                     return (Made i p_i', env)
+      Nothing  -> throwError $ UnhandledTagPat i p_i table
+    (RecTy x r, _)                   -> do
+      env <- ask
+      checkTypePatBind (substRecTy (typeCxt env) x t r) p
+    _                                -> throwError $ MistypedPat p t
 
 inferTypeCoPatBind :: (MonadReader TyInEnv m, MonadError TypeError m)
                    => Type -> CoPattern -> m (CoPattern, Type, TyInEnv)
@@ -750,16 +773,20 @@ inferTypeCoPatBind t copat = case copat of
   SelfIs x -> return (SelfIs x, t, TyIn mempty $ M.singleton x (CBN ::: t))
   q `CoApp` p -> do
     (q', t', env') <- inferTypeCoPatBind t q
-    (arg, ret) <- case normalizeTypeHead t' of
-      (arg `PairTy` ret)  -> return (arg, ret)
-      _                   -> throwError $ MistypedCoPatElim q "function application" q' t'
+    (arg, ret) <- do
+      t_n <- normalizeTypeHead t'
+      case t_n of
+        (arg `PairTy` ret)  -> return (arg, ret)
+        _                   -> throwError $ MistypedCoPatElim q "function application" q' t'
     (p', env) <- checkTypePatBind arg p
     return (q' `CoApp` p', ret, env <> env')
   q `CoDot` i -> do
     (q', t', env') <- inferTypeCoPatBind t q
-    table <- case normalizeTypeHead t' of
-      (TagTy table) -> return table
-      _             -> throwError $ MistypedCoPatElim q "projection" q' t'
+    table <- do
+      t_n <- normalizeTypeHead t'
+      case t_n of
+        (TagTy table) -> return table
+        _             -> throwError $ MistypedCoPatElim q "projection" q' t'
     ret <- case lookup i table of
       Just ty -> return ty
       Nothing -> throwError $ UnhandledTagCoPat q' i table
@@ -827,76 +854,98 @@ expectReactPolarity expected react actual
   | otherwise          = throwError $ MispolarReact expected react actual
 
 
-normalizePoleHead :: ElabPole -> ElabPole
-normalizePoleHead (s ::: t) = s ::: normalizeTypeHead t
+normalizePoleHead :: (MonadReader TyInEnv m) => ElabPole -> m ElabPole
+normalizePoleHead (s ::: t) = (s :::) <$> normalizeTypeHead t
 
-normalizeTypeHead :: Type -> Type
-normalizeTypeHead (s `ArrowTy` t) = s `PairTy` t
-normalizeTypeHead (s `ArrDoTy` t) = s `PairTy` (ObjTy t)
-normalizeTypeHead t@(RecTy x r)   = normalizeTypeHead (substRecTy x t r)
-normalizeTypeHead t               = t
+normalizeTypeHead :: (MonadReader TyInEnv m) => Type -> m Type
+normalizeTypeHead (s `ArrowTy` t) = return $ s `PairTy` t
+normalizeTypeHead (s `ArrDoTy` t) = return $ s `PairTy` ObjTy t
+normalizeTypeHead t@(RecTy x r)   = do
+  env <- ask
+  normalizeTypeHead (substRecTy (typeCxt env) x t r)
+normalizeTypeHead t               = return t
 
 -- Unfold a recursive type one level by substitution.
 --
--- Invariant: Recursive types are (externally) closed; their body has only one
--- free variable, which is the recursively bound free variable.  Therefore,
--- naive substitution is sound.
-substRecTy :: Variable -> Type -> Type -> Type
-substRecTy x r t0 = case t0 of
-  VarTy y
-    | x == y    -> r
+-- Invariant: All types can only have `External` free type variables in them,
+-- which must be found in the `TyInCxt` (specifically, the `typeCxt` field).
+-- All occurrence of `Internal` variables must be locally bound within the type
+-- (e.g., by a `rec \x = ...`).
+--
+-- Therefore, the only counter-example to naive substitution is when a local
+-- binding of a type variable (from the external namespace) shadows something
+-- visible in the global type context (`typeCxt`).  The type that is inserted
+-- underneath that binding might have free references to that variable in the
+-- global context that would get captured by the local binding.  To avoid the
+-- capture, we can perform one step of freshening by moving the locally bound
+-- type variable from the external namespace into the internal one, and update
+-- all references to it simultaneously during substitution.
+substRecTy :: M.Map Variable a -> TyVar -> Type -> Type -> Type
+substRecTy cxt x r t0 = substTys cxt (M.singleton x r) t0
+
+substTys :: M.Map Variable a -> M.Map TyVar Type -> Type -> Type
+substTys cxt sub t0 = case t0 of
+  VarTy x
+    | Just t' <- M.lookup x sub
+                -> t'
     | otherwise -> t0
-  UnitTy        -> UnitTy
-  s `PairTy` t  -> substRecTy x r s `PairTy` substRecTy x r t
-  s `ArrowTy` t -> substRecTy x r s `ArrowTy` substRecTy x r t
-  s `ArrDoTy` t -> substRecTy x r s `ArrDoTy` substRecTy x r t
-  TagTy its     -> TagTy [ (i, substRecTy x r t) | (i, t) <- its ]
-  ObjTy t       -> ObjTy (substRecTy x r t)
-  RecTy y u     -> RecTy y (substRecTy x r u)
+  UnitTy -> UnitTy
+  s `PairTy` t  -> substTys cxt sub s `PairTy` substTys cxt sub t
+  s `ArrowTy` t -> substTys cxt sub s `ArrowTy` substTys cxt sub t
+  s `ArrDoTy` t -> substTys cxt sub s `ArrDoTy` substTys cxt sub t
+  TagTy its     -> TagTy [ (i, substTys cxt sub t') | (i, t') <- its ]
+  ObjTy t       -> ObjTy (substTys cxt sub t)
+  RecTy (External x) u
+    | M.member x cxt
+                -> RecTy (Internal x) (substTys cxt sub' u)
+    where sub' = M.insert (External x) (VarTy $ Internal x) sub
+  RecTy x u     -> RecTy x (substTys cxt sub u)
 
 partialUnionTy :: Type -> Type -> Maybe Type
-partialUnionTy s t = case (normalizeTypeHead s, normalizeTypeHead t) of
-  (VarTy x, VarTy y)
-    | x == y ->
-      Just $ VarTy y
-  (ObjTy s, ObjTy t)
-    -> ObjTy <$> partialIntersectTy s t
-  (UnitTy, UnitTy) ->
-    Just UnitTy
-  (s1 `PairTy` s2, t1 `PairTy` t2) ->
-    PairTy <$> partialUnionTy s1 t1 <*> partialUnionTy s2 t2
-  (TagTy xss, TagTy yts) ->
-    TagTy <$> combine xss yts
-    where combine []            yts = Just yts
-          combine ((x,s_x):xss) yts
-            | Just (t_x, yts') <- extractTaggedType x yts = do
-                st_x <- partialUnionTy s_x t_x
-                table <- combine xss yts'
-                return ((x, st_x) : table)
-            | otherwise = ((x,s_x) :) <$> combine xss yts
-  _ -> Nothing
+partialUnionTy s t =
+  case (s, t) of
+    (VarTy x, VarTy y)
+      | x == y ->
+        Just $ VarTy y
+    (ObjTy s, ObjTy t)
+      -> ObjTy <$> partialIntersectTy s t
+    (UnitTy, UnitTy) ->
+      Just UnitTy
+    (s1 `PairTy` s2, t1 `PairTy` t2) ->
+      PairTy <$> partialUnionTy s1 t1 <*> partialUnionTy s2 t2
+    (TagTy xss, TagTy yts) ->
+      TagTy <$> combine xss yts
+      where combine []            yts = Just yts
+            combine ((x,s_x):xss) yts
+              | Just (t_x, yts') <- extractTaggedType x yts = do
+                  st_x <- partialUnionTy s_x t_x
+                  table <- combine xss yts'
+                  return ((x, st_x) : table)
+              | otherwise = ((x,s_x) :) <$> combine xss yts
+    _ -> Nothing
 
 partialIntersectTy :: Type -> Type -> Maybe Type
-partialIntersectTy s t = case (normalizeTypeHead s, normalizeTypeHead t) of
-  (VarTy x, VarTy y)
-    | x == y ->
-      Just $ VarTy y
-  (ObjTy s, ObjTy t)
-    -> ObjTy <$> partialUnionTy s t
-  (UnitTy, UnitTy) ->
-    Just UnitTy
-  (s1 `PairTy` s2, t1 `PairTy` t2) ->
-    PairTy <$> partialIntersectTy s1 t1 <*> partialIntersectTy s2 t2
-  (TagTy xss, TagTy yts) ->
-    Just $ TagTy $ common xss yts
-    where common []            _   = []
-          common ((x,s_x):xss) yts
-            | Just a <- x_ty = a : common xss yts
-            | otherwise      = common xss yts
-            where x_ty = do t_x <- lookup x yts
-                            st_x <- partialIntersectTy s_x t_x
-                            return (x, st_x)
-  _ -> Nothing
+partialIntersectTy s t =
+  case (s, t) of
+    (VarTy x, VarTy y)
+      | x == y ->
+        Just $ VarTy y
+    (ObjTy s, ObjTy t)
+      -> ObjTy <$> partialUnionTy s t
+    (UnitTy, UnitTy) ->
+      Just UnitTy
+    (s1 `PairTy` s2, t1 `PairTy` t2) ->
+      PairTy <$> partialIntersectTy s1 t1 <*> partialIntersectTy s2 t2
+    (TagTy xss, TagTy yts) ->
+      Just $ TagTy $ common xss yts
+      where common []            _   = []
+            common ((x,s_x):xss) yts
+              | Just a <- x_ty = a : common xss yts
+              | otherwise      = common xss yts
+              where x_ty = do t_x <- lookup x yts
+                              st_x <- partialIntersectTy s_x t_x
+                              return (x, st_x)
+    _ -> Nothing
 
 extractTaggedType :: Literal -> [(Literal, Type)] -> Maybe (Type, [(Literal, Type)])
 extractTaggedType i (a@(j,t):tys)

@@ -4,6 +4,8 @@
 {-# LANGUAGE DeriveFunctor #-}
 module Coo.DualCore.Syntax where
 
+import Coo.Data.Namespace
+
 import qualified Data.Map as M
 import Control.Monad (ap)
 import Data.Bifunctor
@@ -86,14 +88,16 @@ data Dir o = GoTo | ToGo | Infer | Check o
   deriving (Show, Eq, Functor)
 
 data Type x i
-  = VarTy x
-  | RecTy x (Type x i)
+  = VarTy (TyVar x)
+  | RecTy (TyVar x) (Type x i)
   | UnitTy
   | Type x i `PairTy` Type x i
   | TagTy (M.Map i (Type x i))
   | ObjTy (Type x i)
-  | SameTypeAs x
+-- | SameTypeAs x
   deriving (Show, Ord)
+
+type TyVar x = Reserve x x
 
 data TyAnn x i
   = TypeIs (Type x i)
@@ -253,16 +257,16 @@ mapVarBoundVal :: Ord y => (x -> y) -> Bound x i o x x -> Bound y i o y y
 mapVarBoundVal f (LetVal o v) = LetVal o (mapVarDatVal f v)
 mapVarBoundVal f (LetFun o c) = LetFun o (mapVarClsVal f c)
 
-freeTypeVars :: (Ord x) => Type x i -> M.Map x x
+freeTypeVars :: (Ord x) => Type x i -> M.Map (TyVar x) (TyVar x)
 freeTypeVars (VarTy x)      = M.singleton x x
 freeTypeVars (RecTy x t)    = M.delete x $ freeTypeVars t
 freeTypeVars UnitTy         = M.empty
 freeTypeVars (s `PairTy` t) = freeTypeVars s <> freeTypeVars t
 freeTypeVars (TagTy xts)    = M.unions [ freeTypeVars t | (_, t) <- M.toList xts ]
 freeTypeVars (ObjTy t)      = freeTypeVars t
-freeTypeVars (SameTypeAs _) = M.empty
+-- freeTypeVars (SameTypeAs _) = M.empty
 
-renameTypeVars :: (Ord x) => M.Map x x -> Type x i -> Type x i
+renameTypeVars :: (Ord x) => M.Map (TyVar x) (TyVar x) -> Type x i -> Type x i
 renameTypeVars sub (VarTy x)      = case M.lookup x sub of
   Just y  -> VarTy y
   Nothing -> VarTy x
@@ -274,9 +278,11 @@ renameTypeVars _   UnitTy         = UnitTy
 renameTypeVars sub (s `PairTy` t) = renameTypeVars sub s `PairTy` renameTypeVars sub t
 renameTypeVars sub (TagTy zts)    = TagTy $ renameTypeVars sub <$> zts
 renameTypeVars sub (ObjTy t)      = ObjTy $ renameTypeVars sub t
-renameTypeVars _   (SameTypeAs x) = SameTypeAs x
+-- renameTypeVars _   (SameTypeAs x) = SameTypeAs x
 
-openTypeEquality :: (Ord x, Ord i) => M.Map x x -> Type x i -> Type x i -> Bool
+openTypeEquality :: (Ord x, Ord i)
+                 => M.Map (TyVar x) (TyVar x)
+                 -> Type x i -> Type x i -> Bool
 openTypeEquality eq s t = case (s, t) of
   (VarTy x, VarTy y) -> case M.lookup x eq of
     Nothing -> False
@@ -291,6 +297,6 @@ openTypeEquality eq s t = case (s, t) of
     where sameTagEq x s'
             | Just t' <- M.lookup x yts = openTypeEquality eq s' t'
             | otherwise                 = False
-  (SameTypeAs x, SameTypeAs y) -> x == y
+--  (SameTypeAs x, SameTypeAs y) -> x == y
   (_, _) -> False
 

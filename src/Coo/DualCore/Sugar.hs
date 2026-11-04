@@ -30,9 +30,6 @@ instance Pretty Label where
   pretty Unmatched = pretty "unmatched"
   pretty (Temp n)  = pretty "temp" <> pretty n
 
-pattern HereVar, ItVar, CtxtVar, JoinVar, SelfVar, OtherVar
-  :: Trm (Reserve Label x) i o
-
 pattern HereVar  = Var (Internal Here)
 pattern ItVar    = Var (Internal It)
 pattern CtxtVar  = Var (Internal Context)
@@ -40,23 +37,16 @@ pattern JoinVar  = Var (Internal Join)
 pattern SelfVar  = Var (Internal Self)
 pattern OtherVar = Var (Internal Other)
 
-pattern BlankPat :: Pat i c (Reserve Label a)
 pattern BlankPat = A (Internal Blank)
 
-pattern NonRecCoPat :: Pat i c a -> CoPat i c a
 pattern NonRecCoPat p = Nothing :.: p
 
-pattern BlankCoPat :: CoPat i c (Reserve Label a)
 pattern BlankCoPat = NonRecCoPat BlankPat
 
-pattern HerePat :: Pat i c (Reserve Label a)
 pattern HerePat = A (Internal Here)
 
-pattern SelfCoPat :: Pat i (Reserve Label c) a
-                  -> CoPat i (Reserve Label c) a
 pattern SelfCoPat p = Just (Internal Self) :.: p
 
-pattern HereCoPat :: CoPat i (Reserve Label c) (Reserve Label a)
 pattern HereCoPat = SelfCoPat HerePat
 
 pattern TruePat, FalsePat :: Pat Literal c a

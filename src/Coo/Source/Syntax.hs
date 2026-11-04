@@ -5,6 +5,8 @@
 {-# LANGUAGE ParallelListComp #-}
 module Coo.Source.Syntax where
 
+import Coo.Data.Namespace
+
 import Data.List (sortBy)
 import Data.Function (on)
 import Data.Text hiding (length)
@@ -13,6 +15,7 @@ import qualified Data.Map as M
 
 type Variable = Text
 type TagName = Text
+type TyVar = Reserve Variable Variable
 data Parameter = Bound Variable | Unbound Variable | Implicit Label
   deriving (Show, Eq, Ord)
 
@@ -127,8 +130,8 @@ opStrat CBV = CBN
 opStrat CBN = CBV
 
 data Type
-  = VarTy Variable
-  | RecTy Variable Type
+  = VarTy TyVar
+  | RecTy TyVar Type
   | UnitTy
   | Type `PairTy` Type
   | Type `ArrowTy` Type
@@ -156,10 +159,10 @@ pattern StringTyName = "string"
 pattern BoolTyName   = "bool"
 
 pattern IntTy, FloatTy, StringTy, BoolTy :: Type
-pattern IntTy    = VarTy IntTyName
-pattern FloatTy  = VarTy FloatTyName
-pattern StringTy = VarTy StringTyName
-pattern BoolTy   = VarTy BoolTyName
+pattern IntTy    = VarTy (External IntTyName)
+pattern FloatTy  = VarTy (External FloatTyName)
+pattern StringTy = VarTy (External StringTyName)
+pattern BoolTy   = VarTy (External BoolTyName)
 
 pattern TrueName, FalseName :: TagName
 pattern TrueName  = "True"
@@ -294,7 +297,7 @@ desugarTopArrowTy (s `ArrowTy` t) = s `PairTy` t
 desugarTopArrowTy (s `ArrDoTy` t) = s `PairTy` (ObjTy t)
 desugarTopArrowTy t               = t
 
-freeTypeVars :: Type -> M.Map Variable Variable
+freeTypeVars :: Type -> M.Map TyVar TyVar
 freeTypeVars (VarTy x)       = M.singleton x x
 freeTypeVars (RecTy x t)     = M.delete x $ freeTypeVars t
 freeTypeVars UnitTy          = M.empty
@@ -304,7 +307,7 @@ freeTypeVars (s `ArrDoTy` t) = freeTypeVars s <> freeTypeVars t
 freeTypeVars (TagTy xts)     = M.unions [ freeTypeVars t | (_, t) <- xts ]
 freeTypeVars (ObjTy t)       = freeTypeVars t
 
-openTypeEquality :: M.Map Variable Variable
+openTypeEquality :: M.Map TyVar TyVar
                  -> Type -> Type -> Bool
 openTypeEquality eq s t = case (desugarTopArrowTy s, desugarTopArrowTy t) of
   (VarTy x, VarTy y) -> case M.lookup x eq of

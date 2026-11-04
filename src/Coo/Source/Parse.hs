@@ -5,6 +5,7 @@ import Coo.Source.Syntax
 import Coo.Grammar.Fixity
 import Coo.Grammar.Lexer
 -- import Coo.Grammar.Test
+import Coo.Data.Namespace
 
 import qualified Data.Text as Txt
 import Data.Foldable
@@ -97,6 +98,9 @@ bound = Bound <$> variable <?> "bound parameter"
 
 parameter :: Parser Parameter
 parameter = unbound <|> bound <?> "parameter"
+
+tyvar :: Parser TyVar
+tyvar = External <$> variable <?> "type variable"
 
 tag :: Parser TagName
 tag = Txt.pack <$> freeName <?> "tag name"
@@ -435,8 +439,8 @@ nonemptyType =  parseOpTable coreTyOpTable basicType
             <?> "nonempty type"
 
 basicType :: Parser Type
-basicType =  VarTy <$> variable
-         <|> RecTy <$> (rec_ *> variable <* equal) <*> nonemptyType
+basicType =  VarTy <$> tyvar
+         <|> RecTy <$> (rec_ *> tyvar <* equal) <*> nonemptyType
          <|> TagTy <$> brackets (tagType `sepBy` alt)
          <|> ObjTy <$> braces typ
          <|> parens typ
