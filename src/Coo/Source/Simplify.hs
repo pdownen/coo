@@ -190,6 +190,7 @@ simplifyReactsStm :: Statement -> Statement
 simplifyReactsStm s = case s of
   Go u a t         -> Go (simplifyReactsTrm u) a (simplifyReactsTrm <$> t)
   Run t            -> Run (simplifyReactsTrm t)
+  TypeDef x t      -> TypeDef x t
   LocalFun d r     -> LocalFun d (simplifyReacts r)
   SetMatch p t c h ->
     SetMatch p (simplifyReactsTrm t) (simplifyReactsCaveat <$> c) (simplifyReacts <$> h)

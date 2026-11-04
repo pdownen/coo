@@ -294,8 +294,8 @@ initFocus = DC.FocAs { DC.fociNote = DC.stratFoci CBV,
                        DC.nameTemp = Internal . DC.Temp,
                        DC.nameHere = Internal DC.It }
 
-makePrimTypeCxt :: [S.PrimType] -> M.Map S.Variable S.PrimType
-makePrimTypeCxt table = M.fromList [ (primTyName t, t) | t <- table ]
+makePrimTypeCxt :: [S.PrimType] -> M.Map S.Variable S.TypeDefn
+makePrimTypeCxt table = M.fromList [ (primTyName t, S.PrimTyDef t) | t <- table ]
 
 makeLocalTypeCxt :: [(OpIO, S.Type)] -> M.Map S.Parameter S.ElabPole
 makeLocalTypeCxt table = M.fromList
@@ -307,12 +307,16 @@ makeSourceTyInEnv primTys primOps =
   S.TyIn (makePrimTypeCxt primTys) (makeLocalTypeCxt primOps)
 
 desugarTyInEnv :: S.TyInEnv -> DC.TyInEnv S.CoreId S.Literal
-desugarTyInEnv (S.TyIn ptys vars) = DC.TyIn ptys' vars'
-  where ptys' = M.fromList [ (External x, pty)
-                           | (x, pty) <- M.toList ptys ]
+desugarTyInEnv (S.TyIn tyds vars) = DC.TyIn tyds' vars'
+  where tyds' = M.fromList [ (External x, desugarTypeDefn tyd)
+                           | (x, tyd) <- M.toList tyds ]
         vars' = M.fromList [ (S.desugarParam x,
                               S.desugarStrat s DC.::: S.desugarType t)
                            | (x, s S.::: t) <- M.toList vars ]
+
+desugarTypeDefn :: S.TypeDefn -> DC.TypeDefn S.CoreId S.Literal
+desugarTypeDefn (S.PrimTyDef pty) = DC.PrimTyDef pty
+desugarTypeDefn (S.UserTyDef uty) = DC.UserTyDef $ S.desugarType uty
 
 defaultOptions :: ReplOptions
 defaultOptions = RO { typeOption  = IgnoreTypes,

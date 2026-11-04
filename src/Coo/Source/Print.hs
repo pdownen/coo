@@ -35,6 +35,7 @@ instance Pretty Statement where
     [ Just $ pretty "go" <+> pretty v,
       (pretty "as" <+>) <$> fmap pretty a,
       (pretty "to" <+>) <$> fmap pretty t ]
+  pretty (TypeDef x t)  = sep [pretty "type", pretty x, pretty "=", pretty t]
   pretty (LocalFun d r) = prettyFunDeclare d $ pretty "fun" <+> align (prettyReact RecMode r)
   pretty (If r)         = pretty "if" <+> align (prettyReact GuardMode r)
   pretty (Case t r)     = align $ vsep [ pretty "match" <+> pretty t <+> pretty "with",

@@ -142,6 +142,7 @@ statement =  Go <$> (go_ *> term)
          <|> Case <$> ((match_ <|> case_) *> term)
                   <*> reactSwitch empty
          <|> If <$> (if_ *> reactIf execsCmd)
+         <|> TypeDef <$> (type_ *> variable) <* equal <*> typ
          <|> uncurry SetMatch <$> defVal (takes <|> equal)
                               <*> optional (if_ *> reactCaveat)
                               <*> optional (else_ *> reactWhole)

@@ -84,7 +84,10 @@ instance Show (PrimTy x i) where
 
 instance Pretty (PrimTy x i) where
 
-data TyInEnv x i = TyIn { typeCxt :: M.Map x (PrimTy x i),
+data TypeDefn x i = PrimTyDef (PrimTy x i) | UserTyDef (Type x i)
+  deriving (Show)
+
+data TyInEnv x i = TyIn { typeCxt :: M.Map x (TypeDefn x i),
                           fromCxt :: M.Map x (ElabPole x i) }
 
 newtype TyOutEnv x i = TyOut { toCxt :: M.Map x (TypeConstraint x i) }
@@ -127,6 +130,7 @@ data TypeError x i
   | TagTypeUnhandled i (M.Map i (Type x i))
   | UnannotatedBinding (Bound x i (UnelabPole x i) x x)
   | UnknownTypeVar x
+  | UnclosedTypeVar x
   | BadPrimTypePat (PrimTy x i) (GenericPat i)
   | UnboundConstraints (TyOutEnv x i)
   deriving (Show)
@@ -181,6 +185,8 @@ instance (Pretty x, Pretty i) => Pretty (TypeError x i) where
       indent 4 $ pretty b ]
   pretty (UnknownTypeVar x) = vsep
     [ pretty "The type variable" <+> pretty x <+> pretty "is not defined in this context."]
+  pretty (UnclosedTypeVar x) = vsep
+    [ pretty "Internal type variable" <+> pretty x <+> pretty "used outside of its scope."]
   pretty (BadPrimTypePat t p) = vsep
     [ pretty "The primitive type" <+> pretty t <+> pretty "is incompatible with the pattern:",
       indent 4 $ pretty p ]
@@ -358,10 +364,14 @@ checkTypePat cod dat t p = do
     (VarTy (External x), _) -> do
       cxt <- typeCxt <$> ask
       case M.lookup x cxt of
-        Just pty -> case checkPrimPat pty p of
-                      Just p' -> bitraverse (uncurry cod) (uncurry dat) p'
-                      Nothing -> throwError $ BadPrimTypePat pty (GenPat p)
+        Just (PrimTyDef pty) -> case checkPrimPat pty p of
+          Just p' -> bitraverse (uncurry cod) (uncurry dat) p'
+          Nothing -> throwError $ BadPrimTypePat pty (GenPat p)
+        Just (UserTyDef uty) -> do
+          checkTypePat cod dat uty p
         Nothing  -> throwError $ UnknownTypeVar x
+    (VarTy (Internal x), _) -> do
+      throwError $ UnclosedTypeVar x
     (RecTy x r, _) -> do
       env <- ask
       checkTypePat cod dat (substRecTy (typeCxt env) x t r) p

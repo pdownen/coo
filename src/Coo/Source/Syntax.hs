@@ -42,6 +42,7 @@ data Statement
   | SetMatch Pattern Term (Maybe SetCaveat) (Maybe Reaction)
   | If Reaction
   | Case Term Reaction
+  | TypeDef Variable Type
   deriving (Show)
 
 type FunDeclare = (Maybe Variable, Maybe Type)

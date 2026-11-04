@@ -85,7 +85,10 @@ instance Pretty TypeConstraint where
 
 type PrimType = DC.PrimTy CoreId CoreLit
 
-data TyInEnv  = TyIn { typeCxt :: M.Map Variable PrimType,
+data TypeDefn = PrimTyDef PrimType | UserTyDef Type
+  deriving (Show)
+
+data TyInEnv  = TyIn { typeCxt :: M.Map Variable  TypeDefn,
                        fromCxt :: M.Map Parameter ElabPole }
   deriving (Show)
 
@@ -133,8 +136,10 @@ data TypeError
   | MistypedVariable ElabPole Parameter ElabPole
   | UntypedVariable Parameter
   | UnknownTypeVar Variable
+  | UnclosedTypeVar Variable
   | BadPrimTypeLit PrimType Literal
   | UnboundConstraints TyOutEnv
+  | RedefinedType Variable Type
   deriving (Show)
 
 instance Pretty TypeError where
@@ -242,6 +247,8 @@ instance Pretty TypeError where
       indent 4 (pretty $ q `CoDot` i) ]
   pretty (UnknownTypeVar x) = vsep
     [ pretty "The type variable" <+> pretty x <+> pretty "is not defined in this context." ]
+  pretty (UnclosedTypeVar x) = vsep
+    [ pretty "Internal type variable" <+> pretty x <+> pretty "used outside of its scope." ]
   pretty (BadPrimTypeLit t i) = vsep
     [ sep [ pretty "The literal value",
             pretty i,
@@ -250,6 +257,9 @@ instance Pretty TypeError where
   pretty (UnboundConstraints env) = vsep
     [ pretty "Unbound variables used outside of defining context:",
       indent 4 (pretty env) ]
+  pretty (RedefinedType x t) = vsep
+    [ sep [pretty "Cannot redefine the existing type", pretty x, pretty "as:"],
+      indent 4 (pretty t) ]
 
 type MonadType m = (MonadReader TyInEnv m, MonadWriter TyOutEnv m, MonadError TypeError m)
 
@@ -320,6 +330,12 @@ elaborateStms (s:c) = do
 
 elaborateStm :: (MonadType m) => Statement -> m (Statement, TyInEnv)
 elaborateStm s = case s of
+  TypeDef x t -> do
+    let tenv = TyIn (M.singleton x $ UserTyDef t) mempty
+    env <- ask
+    if M.member x (typeCxt env)
+      then throwError $ RedefinedType x t
+      else return (s, tenv)
   Run t -> do
     ext <- askExtent
     case ext of
@@ -396,9 +412,6 @@ isInferrableTerm _           = False
 
 elaborateTerm :: (MonadType m) => Maybe ElabPole -> Term -> m (Term, ElabPole)
 elaborateTerm mo t = case (mo, t) of
-  (Just (CBV ::: a@(VarTy (External x))), Make i Nil) -> do
-    j <- checkTypePrimLit x i
-    return (Make j Nil, CBV ::: a)
   (_, Var x) -> do
     o' <- elaborateVar mo x
     return (t, o')
@@ -427,9 +440,6 @@ elaborateTerm mo t = case (mo, t) of
   (Just o, Do r) -> do
     r' <- checkTypeExtReact Whole o r
     return (Do r', o)
-  -- (Just (s ::: r@(RecTy x r')), _) -> do
-  --   (t', s' ::: _) <- elaborateTerm (Just (s ::: substRecTy x r r')) t
-  --   return (t', s' ::: r)
   (Just o, Nil) -> do
     o' <- normalizePoleHead o
     case o' of
@@ -444,6 +454,7 @@ elaborateTerm mo t = case (mo, t) of
         return ((u1' `Pair` u2'), o)
       _                          -> throwError $ MistypedIntro t "a pair" o
   (Just o, Make i u) -> do
+    env <- ask
     o' <- normalizePoleHead o
     case o' of
       (CBV ::: TagTy table)
@@ -451,6 +462,10 @@ elaborateTerm mo t = case (mo, t) of
             u' <- checkTypeTerm (CBV ::: a_i) u
             return (Make i u', o)
         | otherwise -> throwError $ UnhandledTagTerm "make" t table i
+      (CBV ::: VarTy (External x))
+        | Just (PrimTyDef pty) <- M.lookup x (typeCxt env), Nil <- u -> do
+            j <- checkTypePrimLit pty i
+            return (Make j Nil, o)
       _             -> throwError $ MistypedIntro t "a tagged value" o
   (Just o, Obj u) -> do
     o' <- normalizePoleHead o
@@ -623,14 +638,11 @@ tryInferTypeImplicit x = do
   return $ M.lookup (Implicit x) (fromCxt cxt)
 
 checkTypePrimLit :: (MonadReader TyInEnv m, MonadError TypeError m)
-                 => Variable -> Literal -> m Literal
-checkTypePrimLit x i = do
-  cxt <- typeCxt <$> ask
-  case M.lookup x cxt of
-    Just pty -> case DC.checkPrimPat pty (i DC.:@: DC.MT) of
-      Just (j DC.:@: DC.MT) -> return j
-      _                     -> throwError $ BadPrimTypeLit pty i
-    Nothing  -> throwError $ UnknownTypeVar x
+                 => PrimType -> Literal -> m Literal
+checkTypePrimLit pty i = do
+  case DC.checkPrimPat pty (i DC.:@: DC.MT) of
+    Just (j DC.:@: DC.MT) -> return j
+    _                     -> throwError $ BadPrimTypeLit pty i
 
 elaborateReact :: (MonadType m) => Reaction -> m Reaction
 elaborateReact react = case react of
@@ -743,11 +755,9 @@ inferTypeCaveatBind (match, t) = do
 checkTypePatBind :: (MonadReader TyInEnv m, MonadError TypeError m)
                  => Type -> Pattern -> m (Pattern, TyInEnv)
 checkTypePatBind t p = do
+  env0 <- ask
   t_n <- normalizeTypeHead t
   case (t_n, p) of
-    (VarTy (External x), Made i IsNil)   -> do
-      j <- checkTypePrimLit x i
-      return (Made j IsNil, mempty)
     (_, Any x)          -> do
       return (Any x, TyIn mempty $ M.singleton x (CBV ::: t))
     (ObjTy t', IsObj x)        -> do
@@ -762,6 +772,10 @@ checkTypePatBind t p = do
       Just t_i -> do (p_i', env) <- checkTypePatBind t_i p_i
                      return (Made i p_i', env)
       Nothing  -> throwError $ UnhandledTagPat i p_i table
+    (VarTy (External x), Made i IsNil)
+      | Just (PrimTyDef pty) <- M.lookup x (typeCxt env0) -> do
+          j <- checkTypePrimLit pty i
+          return (Made j IsNil, mempty)
     (RecTy x r, _)                   -> do
       env <- ask
       checkTypePatBind (substRecTy (typeCxt env) x t r) p
@@ -854,16 +868,26 @@ expectReactPolarity expected react actual
   | otherwise          = throwError $ MispolarReact expected react actual
 
 
-normalizePoleHead :: (MonadReader TyInEnv m) => ElabPole -> m ElabPole
+normalizePoleHead :: (MonadReader TyInEnv m, MonadError TypeError m)
+                  => ElabPole -> m ElabPole
 normalizePoleHead (s ::: t) = (s :::) <$> normalizeTypeHead t
 
-normalizeTypeHead :: (MonadReader TyInEnv m) => Type -> m Type
-normalizeTypeHead (s `ArrowTy` t) = return $ s `PairTy` t
-normalizeTypeHead (s `ArrDoTy` t) = return $ s `PairTy` ObjTy t
-normalizeTypeHead t@(RecTy x r)   = do
+normalizeTypeHead :: (MonadReader TyInEnv m, MonadError TypeError m)
+                  => Type -> m Type
+normalizeTypeHead (s `ArrowTy` t)      = return $ s `PairTy` t
+normalizeTypeHead (s `ArrDoTy` t)      = return $ s `PairTy` ObjTy t
+normalizeTypeHead (VarTy (External x)) = do
+  env <- ask
+  case M.lookup x (typeCxt env) of
+    Just (UserTyDef t) -> return t
+    Just (PrimTyDef _) -> return $ VarTy $ External x
+    Nothing            -> throwError $ UnknownTypeVar x
+normalizeTypeHead (VarTy (Internal x)) = do
+  throwError $ UnclosedTypeVar x
+normalizeTypeHead t@(RecTy x r)        = do
   env <- ask
   normalizeTypeHead (substRecTy (typeCxt env) x t r)
-normalizeTypeHead t               = return t
+normalizeTypeHead t                    = return t
 
 -- Unfold a recursive type one level by substitution.
 --

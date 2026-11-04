@@ -105,6 +105,8 @@ desugarStmt' (Case t r) c
 desugarStmt' (If r) c2
   = do c1 <- desugarGuard r
        closeFinalGuard (null c2) <$> c1 `joinStmt` c2
+desugarStmt' (TypeDef _ _) c
+  = desugarCmd c
 
 joinStmt :: (DesugarMonad m)
          => CoreCmd -> Command -> m CoreCmd
