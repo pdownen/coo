@@ -1,40 +1,36 @@
+type list   a = [Nil | Cons: a, list a];
+type stream a = [Head: {a} | Tail: {{stream a}}];
+
 # General stream and list utility functions
-fun always : bool ~> rec s = [Head: {bool} | Tail: {{s}}];
+fun always : bool ~> stream bool;
 fun | always(x).Head = x
     | always(x).Tail = {always(x)};
 
-fun count : int ~> rec s = [Head: {int} | Tail: {{s}}];
+fun count : int ~> stream int;
 fun | count(n).Head = n
     | count(n).Tail = {count(n+1)};
 
-val nats = {count 0}
-  : {rec s = [Head: {int} | Tail: {{s}}]};
+val nats = {count 0} : {stream int};
 
-fun takes : int, {rec s = [Head: {int} | Tail: {{s}}]}
-         -> rec l = [Nil | Cons: int, l];
+fun takes : int, {stream int} -> list int;
 fun | takes 0 {xs} = Nil
     | takes n {xs} = Cons[xs.Head, takes (n-1) (xs.Tail)];
 
-fun maps : {(int, bool) -> int}, {rec s = [Head: {int, bool} | Tail: {{s}}]}
-        ~> rec s = [Head: {int} | Tail: {{s}}];
+fun maps : {(int, bool) -> int}, {stream(int, bool)} ~> stream int;
 fun maps {f} where
   | stream{xs}.Head = f(xs.Head)
   | stream{xs}.Tail = {stream(xs.Tail)};
 
-fun zips : {rec s = [Head: {int} | Tail: {{s}}]}
-         , {rec s = [Head: {bool} | Tail: {{s}}]}
-         ~> rec s = [Head: {int, bool} | Tail: {{s}}];
+fun zips : {stream int}, {stream bool} ~> stream(int, bool);
 fun | zips {xs} {ys} .Head = (xs.Head, ys.Head)
     | zips {xs} {ys} .Tail = {zips (xs.Tail) (ys.Tail)};
 
-fun appends : (rec l = [Nil | Cons: bool, l])
-            , {rec s = [Head: {bool} | Tail: {{s}}]}
-            ~> rec s = [Head: {bool} | Tail: {{s}}];
+fun appends : list bool, {stream bool} ~> stream bool;
 fun | appends Nil       {ys}      = ys
     | appends Cons[x,xs] ys .Head = x
     | appends Cons[x,xs] ys .Tail = {appends xs ys};
 
-fun print_list : (rec lst = [Nil | Cons: int, lst]) -> ();
+fun print_list : list int -> ();
 fun | print_list Nil = ()
     | print_list Cons[x,xs] = do => {
         pprint x;
@@ -47,10 +43,7 @@ fun | same True  True  = True
     | same _     _     = False;
 
 # The prescient infinite filter function
-fun filterSwap : {int -> bool}
-               , {rec s = [Head: {int} | Tail: {{s}}]}
-              ~> (rec s = [Head: {int} | Tail: {{s}}])
-               , (rec s = [Head: {int} | Tail: {{s}}]);
+fun filterSwap : {int -> bool}, {stream int} ~> stream int, stream int;
 fun filterSwap {p} where
   | go filter {xs} to Head[{this}], that
     = go xs.Head to {this}
@@ -60,16 +53,13 @@ fun filterSwap {p} where
          = go filter {ys} to this, that
        | = go filter {ys} to that, this;
 
-fun prescientFilter : {int -> bool}, {rec s = [Head: {int} | Tail: {{s}}]}
-                   -> {rec s = [Head: {int} | Tail: {{s}}]};
+fun prescientFilter : {int -> bool}, {stream int} -> {stream int};
 fun go prescientFilter {p} {xs} to {start}
   = go filterSwap {p} {xs} to start, start;
 
 # Same filter definitions at a different type, due to monomorphization
-fun filterSwap2 : {(int, bool) -> bool}
-                , {rec s = [Head: {int, bool} | Tail: {{s}}]}
-               ~> (rec s = [Head: {int, bool} | Tail: {{s}}])
-                , (rec s = [Head: {int, bool} | Tail: {{s}}]);
+fun filterSwap2 : {(int, bool) -> bool}, {stream(int, bool)}
+               ~> stream(int, bool), stream(int, bool);
 fun filterSwap2 {p} where
   | go filter {xs} to Head[{this}], that
     = go xs.Head to {this}
@@ -79,23 +69,20 @@ fun filterSwap2 {p} where
          = go filter {ys} to this, that
        | = go filter {ys} to that, this;
 
-fun prescientFilter2 : {(int, bool) -> bool}
-                     , {rec s = [Head: {int, bool} | Tail: {{s}}]}
-                    -> {rec s = [Head: {int, bool} | Tail: {{s}}]};
+fun prescientFilter2 : {(int, bool) -> bool}, {stream(int, bool)} -> {stream(int, bool)};
 fun go prescientFilter2 {p} {xs} to {start}
   = go filterSwap2 {p} {xs} to start, start;
 
 
 # The infinite pigeonhole assignment function
-fun infinitePigeons : {rec s = [Head: {bool} | Tail: {{s}}]}
-                   -> {rec s = [Head: {int} | Tail: {{s}}]};
+fun infinitePigeons : {stream bool} -> {stream int};
 fun infinitePigeons bits = do => {
   val decided = prescientFilter2 {fn(x,y) => y} {zips nats bits};
   go {maps {fn(x,y) => x} decided};
 };
 
 # Testing a stream with 5 hand-selected booleans then is always False
-fun test : rec s = [Head: {bool} | Tail: {{s}}];
+fun test : stream bool;
 fun test =
     appends
     Cons[True, Cons[True, Cons[False, Cons[True, Cons[True, Nil]]]]]

@@ -684,9 +684,11 @@ typeCheckCore opt c = do
     (Right c', TyOut env)
       | M.null env          -> return $ postCheckCore c'
       | isJoinConstraint env, Just (_ ::? Typed t) <- M.lookup joinId env -> do
-          case t of
-            UnitTy -> return ()
-            _      -> liftIO $ putDoc $ pretty ":" <+> pretty t <> hardline
+          batch <- batchOption . replOptions <$> liftReplState get
+          case (t, batch) of
+            (UnitTy, _) -> return ()
+            (_, True)   -> return ()
+            _           -> liftIO $ putDoc $ pretty ":" <+> pretty t <> hardline
           return $ postCheckCore c'
       | otherwise           -> handleTypeErr $ DualTypeErr $ UnboundConstraints $ TyOut env
     (Left err, _)           -> handleTypeErr $ DualTypeErr err

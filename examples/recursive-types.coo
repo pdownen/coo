@@ -1,34 +1,36 @@
-# type List int = (rec lst = [Nil | Cons: int, lst])
-
 val fixed_list = Cons[1, Cons[2, Cons[3, Nil]]]
   : [Cons: int, [Cons: int, [Cons: int, [Nil]]]];
 
-val rec_list = Cons[1, Cons[2, Cons[3, Nil]]]
-  : rec lst = [Nil | Cons: int, lst];
+val reclist = Cons[1, Cons[2, Cons[3, Nil]]]
+  : rec lst = [ Nil | Cons: int, lst ];
 
-fun sum : (rec lst = [Nil | Cons: int, lst]) -> int;
+type list a = [ Nil | Cons: a, list a ];
+
+val deflist = Cons[1, Cons[2, Cons[3, Nil]]] : list int;
+
+fun sum : list int -> int;
 fun | sum Nil        = 0
     | sum Cons[x,xs] = x + sum xs;
 
-pprint(sum rec_list);
 #pprint(sum fixed_list);  # Recursive types aren't automatically folded
+#pprint(sum reclist);     # While structurally similar, they aren't the same
+pprint(sum deflist);
 
 
-# type Stream int = (rec strm = [Head: {int} } | Tail: strm])
+type stream a = [ Head: {a} | Tail: stream a ];
 
-fun zeroes : rec strm = [Head: {int} | Tail: strm];
+fun zeroes : stream int;
 fun | zeroes.Head = 0
     | zeroes.Tail = zeroes;
 
-fun count : int ~> rec strm = [Head: {int} | Tail: strm];
+fun count : int ~> stream int;
 fun | count(n).Head = n
     | count(n).Tail = count(n+1);
 
-fun nats : rec strm = [Head: {int} | Tail: strm];
+fun nats : stream int;
 fun nats = count 0;
 
-fun takes : int ~> {rec strm = [Head: {int} | Tail: strm]}
-          -> rec lst = [Nil | Cons: int, lst];
+fun takes : int, {stream int} -> list int;
 fun | takes 0 _    = Nil
     | takes n {xs} = Cons[xs.Head, takes (n-1) {xs.Tail}];
 
@@ -36,27 +38,23 @@ pprint(sum(takes 5 {zeroes}));
 pprint(sum(takes 5 {nats}));
 
 
-fun evens : {rec strm = [Head: {int} | Tail: strm]}
-          ~> rec strm = [Head: {int} | Tail: strm];
+fun evens : {stream int} ~> stream int;
 fun | evens{xs}.Head = xs.Head
     | evens{xs}.Tail = evens{xs.Tail.Tail};
 
-fun odds : {rec strm = [Head: {int} | Tail: strm]}
-          ~> rec strm = [Head: {int} | Tail: strm];
+fun odds : {stream int} ~> stream int;
 fun | odds{xs}.Head = xs.Tail.Head
     | odds{xs}.Tail = odds{xs.Tail.Tail};
 
-fun zigzag : {rec strm = [Head: {int} | Tail: strm]}
-           ~> {rec strm = [Head: {int} | Tail: strm]}
-           ~> rec strm = [Head: {int} | Tail: strm];
+fun zigzag : {stream int}, {stream int} ~> stream int;
 fun | zigzag {xs} _   .Head      = xs.Head
     | zigzag _    {ys}.Tail.Head = ys.Head
     | zigzag {xs} {ys}.Tail.Tail = zigzag {xs.Tail} {ys.Tail};
 
-fun even_nats : rec strm = [Head: {int} | Tail: strm];
+fun even_nats : stream int;
 fun even_nats = evens {nats};
 
-fun odd_nats : rec strm = [Head: {int} | Tail: strm];
+fun odd_nats : stream int;
 fun odd_nats = odds {nats};
 
 pprint(sum(takes 5 {even_nats}));

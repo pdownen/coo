@@ -1,0 +1,9 @@
+fun abs : int -> int;
+fun abs(n) = do => {
+    if | n < 0 => { print "negative"; go 0 - n; }
+       |       => { print "positive"; go n; };
+
+};
+
+pprint(abs(10 - 3));
+pprint(abs(3 - 10));

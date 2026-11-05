@@ -36,6 +36,7 @@ allTestCases =
   , TC { testName="pairs-mono",             runsWell=True,  wellTyped=True,  dumpCore=False }
   , TC { testName="pairs-wrong",            runsWell=True,  wellTyped=False, dumpCore=False }
   , TC { testName="abs",                    runsWell=True,  wellTyped=True,  dumpCore=False }
+  , TC { testName="if-go",                  runsWell=True,  wellTyped=True,  dumpCore=False }
   , TC { testName="match-loop",             runsWell=True,  wellTyped=True,  dumpCore=True  }
   , TC { testName="fact",                   runsWell=True,  wellTyped=True,  dumpCore=True  }
   , TC { testName="collatz",                runsWell=True,  wellTyped=True,  dumpCore=True  }
@@ -52,7 +53,7 @@ allTestCases =
   , TC { testName="collecting",             runsWell=True,  wellTyped=False, dumpCore=False }
   , TC { testName="iterating",              runsWell=True,  wellTyped=False, dumpCore=False }
   , TC { testName="yielding",               runsWell=True,  wellTyped=False, dumpCore=False }
-  , TC { testName="fast-product",           runsWell=True,  wellTyped=False, dumpCore=False }
+  , TC { testName="fast-product",           runsWell=True,  wellTyped=True,  dumpCore=False }
   , TC { testName="safe-div",               runsWell=True,  wellTyped=True,  dumpCore=False }
   , TC { testName="par-div",                runsWell=True,  wellTyped=True,  dumpCore=False }
   , TC { testName="fizzbuzz",               runsWell=True,  wellTyped=True,  dumpCore=False }

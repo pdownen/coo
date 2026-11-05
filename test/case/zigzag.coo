@@ -1,6 +1,6 @@
-fun zigzag : {rec strm = [Head: {int} | Tail: strm]}
-           , {rec strm = [Head: {int} | Tail: strm]}
-           ~> rec strm = [Head: {int} | Tail: strm];
+fun zigzag : {rec s = [Head: {int} | Tail: s]}
+           , {rec s = [Head: {int} | Tail: s]}
+           ~> rec s = [Head: {int} | Tail: s];
 fun | zigzag {xs} {ys} .Head      = xs.Head
     | zigzag {xs} {ys} .Tail.Head = ys.Head
     | zigzag {xs} {ys} .Tail.Tail = zigzag {xs.Tail} {ys.Tail};

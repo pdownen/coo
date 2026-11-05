@@ -1,8 +1,10 @@
-fun : int, int -> [Nothing | Just: int];
+type maybe a = [Nothing | Just: a];
+
+fun : int, int -> maybe int;
 fun | safeDiv x 0 = Nothing
     | safeDiv x y = Just[x/y];
 
-fun : int, int -> [Nothing | Just: int];
+fun : int, int -> maybe int;
 fun undoDivide x y = do => {
   val Just[a] = safeDiv x y
       else Nothing => go Nothing;
@@ -13,7 +15,7 @@ fun undoDivide x y = do => {
   go Just[b];
 };
 
-fun print_answer : [Nothing | Just: int] -> ();
+fun print_answer : maybe int -> ();
 fun | print_answer Nothing = print "no answer"
     | print_answer Just[n] = pprint n;
 

@@ -1,11 +1,13 @@
-fun count : int ~> rec stream = [Head: {int} | Tail: stream];
+type stream a = [Head: {a} | Tail: stream a];
+
+fun count : int ~> stream int;
 fun | count(n).Head = n
     | count(n).Tail = count(n+1);
 
-fun nats : rec stream = [Head: {int} | Tail: stream];
+fun nats : stream int;
 fun nats = count 0;
 
-fun prints : int, {rec strm = [Head: {int} | Tail: strm]} -> ();
+fun prints : int, {stream int} -> ();
 fun | prints 0 {_}  = ()
     | prints n {xs} = do => {
         pprint (xs.Head);

@@ -1,20 +1,16 @@
-fun range : (int, int)
-         ~> rec r
-          = [ Lower: {int}
-            | Upper: {int}
-            | Done:  {bool}
-            | Step:  {{r} ~> r} ~> r ];
+type range_obj = [ Lower: {int}
+                 | Upper: {int}
+                 | Done:  {bool}
+                 | Step:  {{range_obj} ~> range_obj} ~> range_obj ];
+
+fun range : (int, int) ~> range_obj;
 fun range(x, y) where
   | self.Lower      = x
   | self.Upper      = y
   | self.Done       = x > y
   | self.Step{make} = make{range(x+1, y)};
 
-fun twentyThirty : rec r
-                 = [ Lower: {int}
-                   | Upper: {int}
-                   | Done:  {bool}
-                   | Step:  {{r} ~> r} ~> r ];
+fun twentyThirty : range_obj;
 fun twentyThirty = range(20,30);
 
 pprint ! twentyThirty.Lower;
