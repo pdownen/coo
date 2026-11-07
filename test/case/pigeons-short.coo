@@ -54,11 +54,11 @@ fun filterSwap : {int -> bool}
 fun filterSwap {p} where
   | go filter {xs} to Head[{this}], that
     = go xs.Head to {this}
-  | go filter {xs} to Tail[{this}], that
-    if {ys} <= xs.Tail
-    if | same (p(xs.Head)) (p(ys.Head))
-         = go filter {ys} to this, that
-       | = go filter {ys} to that, this;
+  | go filter {xs} to Tail[{this}], that if
+    val {ys} = xs.Tail
+    | same (p(xs.Head)) (p(ys.Head))
+      = go filter {ys} to this, that
+    | = go filter {ys} to that, this;
 
 fun prescientFilter : {int -> bool}, {rec s = [Head: {int} | Tail: {{s}}]}
                    -> {rec s = [Head: {int} | Tail: {{s}}]};
@@ -73,11 +73,11 @@ fun filterSwap2 : {(int, bool) -> bool}
 fun filterSwap2 {p} where
   | go filter {xs} to Head[{this}], that
     = go xs.Head to {this}
-  | go filter {xs} to Tail[{this}], that
-    if {ys} <= xs.Tail
-    if | same (p(xs.Head)) (p(ys.Head))
-         = go filter {ys} to this, that
-       | = go filter {ys} to that, this;
+  | go filter {xs} to Tail[{this}], that if
+    val {ys} <= xs.Tail
+    | same (p(xs.Head)) (p(ys.Head))
+      = go filter {ys} to this, that
+    | = go filter {ys} to that, this;
 
 fun prescientFilter2 : {(int, bool) -> bool}
                      , {rec s = [Head: {int, bool} | Tail: {{s}}]}

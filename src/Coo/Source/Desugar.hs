@@ -189,10 +189,12 @@ immediateReact r = case r of
     | Just c <- irrefutableReact r
       -> let x' DC.:.: p' = desugarCoPat q (desugarPat p)
          in Just (x', p', c)
+  {-
   (q `Rec` r)
     | Just c <- irrefutableReact r
       -> let x' DC.:.: p' = desugarCoPat q DC.HerePat
          in Just (x', p', c)
+  -}
   _ | Just c <- irrefutableReact r
       -> Just (Nothing, DC.HerePat, c)
   _ -> Nothing
