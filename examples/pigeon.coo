@@ -44,12 +44,11 @@ fun | appends Nil       {ys}      = ys
 fun filterSwap {p} where
   | go filter {xs} to Head[{this}], that
     = go xs.Head to {this}
-  | go filter {xs} to Tail[{this}], that = {
-    val {ys} = xs.Tail;
-    if | p(xs.Head) == p(ys.Head)
-         => go filter {ys} to this, that
-       | => go filter {ys} to that, this
-  };
+  | go filter {xs} to Tail[{this}], that if
+    val {ys} = xs.Tail
+    | p(xs.Head) == p(ys.Head)
+      = go filter {ys} to this, that
+    | = go filter {ys} to that, this;
 
 fun go prescientFilter {p} {xs} to {start}
   = go filterSwap {p} {xs} to start, start;

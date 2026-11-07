@@ -204,7 +204,7 @@ coreOpTable = [ leftward  $ postfixOp dotOp <> infixLOp appOp,
                 rightward $ infixROp (adhocBinOps ["^", "^~"]),
                 leftward  $  infixLOp (adhocBinOps ["*", "*~", "/", "/~", "%", "%~"]),
                 leftward  $ infixLOp (adhocBinOps ["+", "+~", "-", "-~"]),
-                leftward  $  infixLOp (adhocBinOps ["<", "<~", ">", ">~", "=<~", ">=~"]),
+                leftward  $  infixLOp (adhocBinOps ["<", "<~", ">", ">~", "=<", "=<~", ">=", ">=~"]),
                 leftward  $ infixLOp (adhocBinOps ["==", "==~", "/=", "/=~"]),
                 rightward $ prefixOp evalOp <> infixROp callOp,
                 rightward $ infixROp pairOp,
@@ -318,7 +318,7 @@ reactSwitch rhs =  if_ *> reactIf rhs
                <|> (to_ <|> with_) *> reactWhole
                <|> (of_ <|> in_) *> reactStack
                <|> (as_ <|> where_) *> reactEq (gives <|> equal)
-               <|> fun_ *> reactLetFun rhs
+               -- <|> fun_ *> reactLetFun rhs
                <|> else_ *> reactElse rhs
                <|> rhs
                <?> "explicit reaction mode"
@@ -337,6 +337,7 @@ reactAltsBlock mode = alt *> (fold <$> mode `sepBy` alt)
 reactNest :: Parser Reaction -> Parser Reaction -> Parser Reaction
 reactNest mode rhs =  reactSwitch rhs
                   <|> reactAlts mode
+                  <|> reactLet (reactNest mode rhs)
                   <?> "nested reaction"
 
 reactStack, reactStack1 :: Parser Reaction
@@ -367,8 +368,16 @@ guardPattern =  val_ *> pat <* (takes <|> equal)
 reactIf rhs =  reactIf1 rhs
            <|> reactNest (reactIf rhs) rhs
 
-reactLetFun :: Parser Reaction -> Parser Reaction
-reactLetFun rhs = uncurry LetFun <$> defFun gives <*> reactSwitch rhs
+reactLet :: Parser Reaction -> Parser Reaction
+reactLet mode =  reactLetFun empty mode <|> reactLetVal takes mode
+             <?> "provisional definition"
+
+reactLetFun :: Parser def -> Parser Reaction -> Parser Reaction
+reactLetFun def mode = uncurry LetFun <$> defFun def <*> mode
+
+reactLetVal :: Parser def -> Parser Reaction -> Parser Reaction
+reactLetVal def mode = valGuard <$> defVal def <*> mode
+  where valGuard (pat, rhs) react = Guard (Just pat) rhs react
 
 reactElse :: Parser Reaction -> Parser Reaction
 reactElse rhs = Else <$> parameter <*> reactSwitch rhs
@@ -379,10 +388,12 @@ reactCaveat =  (,) <$> optional guardPattern <*> nonemptyTerm
 
 reactEq, reactEq1 :: Parser def -> Parser Reaction
 reactEq1 def =  Rec <$> (go_ *> copat)
-                    <*> (Rest <$> (to_ *> pat)
-                              <*> reactNest (reactEq def) (rhsCmd def))
+                    <*> (continue <$> optional (to_ *> pat)
+                                  <*> reactNest (reactEq def) (rhsCmd def))
             <|> Rec <$> copat <*> reactNest (reactEq def) (rhsTerm def)
             <?> "copattern reaction"
+  where continue (Just pat) rhs = Rest pat rhs
+        continue Nothing    rhs = rhs
 
 reactEq def =  reactEq1 def
            <|> reactNest (reactEq def) empty
