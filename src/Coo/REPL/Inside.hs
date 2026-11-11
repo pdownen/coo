@@ -115,6 +115,7 @@ data ReplState = RS { lineno      :: Int,
                       typeSource  :: S.TyInEnv,
                       typeCore    :: DC.TyInEnv ExecId S.Literal,
                       checkpoint  :: GlobIO,
+                      lastFile    :: Maybe FilePath,
                       replOptions :: ReplOptions }
 
 data ReplOptions = RO { typeOption :: TypeCheckingOption,
@@ -331,6 +332,7 @@ makeInitRS primTys primOps =
        typeSource  = tyInEnv,
        typeCore    = desugarTyInEnv tyInEnv,
        checkpoint  = makeInitGlob primOps,
+       lastFile    = Nothing,
        replOptions = defaultOptions }
   where tyInEnv = makeSourceTyInEnv primTys primOps
 
@@ -368,6 +370,15 @@ replTopWith opt cmd = do
   let chk = Save globr rsr hsr
   runPromptIO chk $ runReplT (replStart cmd) initGlob startRS
   forever (runPromptIO chk $ runReplIOinit $ replRestart cmd)
+
+replReset :: ReplIO ()
+replReset = do
+  liftReplState $ modify $ \rs ->
+    initRS{ lineno = lineno rs,
+            lastFile = lastFile rs,
+            replOptions = replOptions rs }
+  checkpointSave
+  return ()
 
 replStart :: ExecCmd -> ReplIO ()
 replStart cmd = do
@@ -483,9 +494,11 @@ processCommand place input = do
 data ReplAside = BeginMultiLine
                | EndMultiLine
                | ExecuteFile String
+               | RerunFile (Maybe String)
                | CheckTypeOfExpr String
                | SetTypeChecker TypeCheckingOption
                | SetInternals InternalsOption
+               | ResetReplState
                | ReplHelp
   deriving (Show, Eq)
 
@@ -518,9 +531,31 @@ gatherMultiLineInput ln more = do
         (Just _,  Right BeginMultiLine) -> do
           liftIO $ putStrLn "# already reading a multi-line statement"
           gatherMultiLineInput ln more
-        (Nothing, Right (ExecuteFile path)) -> liftIO $ readFile path
+        (Nothing, Right (ExecuteFile path)) -> do
+          liftReplState $ modify $ \rs ->
+            rs{ lastFile = Just path }
+          liftIO $ readFile path
         (Just _,  Right (ExecuteFile _))    -> do
           liftIO $ putStrLn "# cannot execute a file during multi-line input"
+          gatherMultiLineInput ln more
+        (Nothing, Right (RerunFile given)) -> do
+          previous <- lastFile <$> liftReplState get
+          let toRun = given <|> previous
+          liftReplState $ modify $ \rs ->
+            rs{ lastFile = toRun }
+          case toRun of
+            Just path -> do
+              replReset
+              liftIO $ readFile path
+            Nothing -> do
+              liftIO $ putStrLn "# there's no previous file to rerun"
+              gatherMultiLineInput ln more
+        (Just _, Right (RerunFile _)) -> do
+          liftIO $ putStrLn "# cannot execute a file during multi-line input"
+          gatherMultiLineInput ln more
+        (_, Right ResetReplState) -> do
+          replReset
+          liftIO $ putStrLn "# reset the repl state to forget old definitions"
           gatherMultiLineInput ln more
         (_, Right (CheckTypeOfExpr str)) -> do
           checkTypeOfExpr str
@@ -557,14 +592,17 @@ replAside =  G.exact "#" *> replSideInstruction
          <?> "repl aside"
 
 replSideInstruction :: G.Parser ReplAside
-replSideInstruction =  G.exact "{" *> pure BeginMultiLine
-                   <|> G.exact "}" *> pure EndMultiLine
-                   <|> G.exact "run" *> (ExecuteFile <$> G.inlineQuote)
-                   <|> G.exact "help" *> pure ReplHelp
-                   <|> G.exact "type" *> (SetTypeChecker <$> typeCheckingOption)
-                   <|> G.exact "check" *> (CheckTypeOfExpr <$> G.anything)
-                   <|> G.exact "core" *> (SetInternals <$> internalsOption)
-                   <?> "repl side instruction (try asking for #!help)"
+replSideInstruction
+  =  G.exact "{" *> pure BeginMultiLine
+ <|> G.exact "}" *> pure EndMultiLine
+ <|> G.exact "run" *> (ExecuteFile <$> G.inlineQuote)
+ <|> G.exact "rerun" *> (RerunFile <$> optional G.inlineQuote)
+ <|> G.exact "reset" *> pure ResetReplState
+ <|> G.exact "type" *> (SetTypeChecker <$> typeCheckingOption)
+ <|> G.exact "check" *> (CheckTypeOfExpr <$> G.anything)
+ <|> G.exact "core" *> (SetInternals <$> internalsOption)
+ <|> G.exact "help" *> pure ReplHelp
+ <?> "repl side instruction (try asking for #help)"
 
 typeCheckingOption :: G.Parser TypeCheckingOption
 typeCheckingOption =  G.exact "ignore" *> pure IgnoreTypes
@@ -1230,9 +1268,11 @@ helpMessage = unlines
   [ "<command>                   execute the given Coo command",
     "#{\\n ...line... \\n#}        enter a command on multiple lines",
     "#run \"<path>\"               read from file <path> and run the command within",
+    "#rerun \"<path>\" (optional)  reset and run the command at <path> (or last run)",
+    "#reset                      reset the repl state and start fresh",
     "#check <expression>         check the type of the given expression",
     "#type ignore|warn|error     set type checking mode",
-    "#core show|hide             display internal compiler information (like dual core)",
+    "#core show|hide             display internal compiler info (like dual core)",
     "#help                       this help message",
     "Ctrl-c                      cancel the currently running command",
     "Ctrl-d                      exit the Coo interpreter" ]
