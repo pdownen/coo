@@ -96,8 +96,10 @@ data PatLitTy
 
 instance Pretty PrimPat where
   pretty (PrimPat desc Nothing)    = prettyBlankPat desc
-  pretty (PrimPat desc (Just cav)) = sep [prettyBlankPat desc,
-                                          pretty "where", pretty cav]
+  pretty (PrimPat desc (Just cav)) = sep [ prettyBlankPat desc,
+                                           indent 2 $ group $ sep
+                                           [ pretty "if",
+                                             pretty cav ] ]
 
 instance Pretty PatDesc where
   pretty (SpecificLit i) = pretty i
