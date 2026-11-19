@@ -46,8 +46,9 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Monad.Catch
+import Control.Exception (AsyncException)
 
-import System.Exit (exitSuccess, exitFailure)
+import System.Exit (exitSuccess, exitFailure, ExitCode)
 import System.IO (hPutStrLn, stderr)
 import System.Console.Haskeline
 import System.Console.Haskeline.History
@@ -153,7 +154,7 @@ data ReplError
   | DualPolarityErr (DC.PolarityError ExecId S.Literal)
   | DualTypeErr (DC.TypeError ExecId S.Literal)
   | RuntimeErr ExecError
-  | HaskellErr IOError
+  | HaskellErr SomeException
   deriving (Show)
 
 data ExecError
@@ -263,6 +264,18 @@ runReplIOinit m = runReplT m initGlob initRS
 
 runPromptIO :: Checkpoint -> PromptIO a -> IO a
 runPromptIO chk m = runInputT defaultSettings (runReaderT m chk)
+
+tryRunPromptIO :: Checkpoint -> ReaderT Checkpoint (InputT IO) a
+               -> IO (Either SomeException a)
+tryRunPromptIO chk m = (Right <$> runPromptIO chk m) `catch` rethrow
+  where rethrow e
+          | Just exit <- fromException e :: Maybe ExitCode = do
+              throwM exit
+          | Just async <- fromException e :: Maybe AsyncException = do
+              throwM async
+          | otherwise = do
+              printHsErr e
+              return $ Left e
 
 runPromptIOinit :: PromptIO a -> IO a
 runPromptIOinit m = do
@@ -389,8 +402,8 @@ replTopWith opt cmd = do
   rsr <- newIORef startRS
   hsr <- newIORef emptyHistory
   let chk = Save globr rsr hsr
-  runPromptIO chk $ runReplT (replStart cmd) initGlob startRS
-  forever (runPromptIO chk $ runReplIOinit $ replRestart cmd)
+  tryRunPromptIO chk $ runReplT (replStart cmd) initGlob startRS
+  forever (tryRunPromptIO chk $ runReplIOinit $ replRestart cmd)
 
 replStart :: ExecCmd -> ReplIO ()
 replStart cmd = do
@@ -428,6 +441,12 @@ printStep m = do
   liftIO $ putStrLn "========================="
   return c
 
+printHsErr :: SomeException -> IO ()
+printHsErr e  = putDoc $ vsep $
+  [ pretty "Sorry, something went horribly wrong...",
+    mempty,
+    pretty $ HaskellErr e,
+    mempty ]
 
 replNextPOp :: ReplState -> OpIO
 replNextPOp rs = POp { opName = Txt.pack $ "repl#" ++ show (lineno rs),
@@ -1235,11 +1254,9 @@ runFileOp = POp {
           [totalPrimPat $ (AnonHole (CustomPat "filepath") :@: MT) :*: C ()]
 
 readScriptFile :: FilePath -> ReplIO String
-readScriptFile path = do
-  x <- liftIO $ Control.Monad.Catch.try $ readFile path
-  case x of
-    Right txt -> return txt
-    Left  err -> throwError $ HaskellErr err
+readScriptFile path = (liftIO $ readFile path)
+  `catch`
+  (\err -> throwError $ HaskellErr $ toException (err :: IOError))
 
 loadFileForExecution :: FilePath -> ReplIO ExecCmd
 loadFileForExecution path = do
