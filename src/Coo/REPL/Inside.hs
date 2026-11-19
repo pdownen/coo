@@ -69,24 +69,46 @@ type ExecCls = DC.Cls ExecId S.Literal DC.Strat OpIO Void
 
 type ExecPat = DC.Pat S.Literal ExecId ExecId
 
-type PrimPat = DC.Pat PatDesc () ()
+data PrimPat = PrimPat { primPatDesc   :: DC.Pat PatDesc () (),
+                         primPatCaveat :: Maybe String }
+  deriving (Show, Eq)
+
+totalPrimPat :: DC.Pat PatDesc () () -> PrimPat
+totalPrimPat desc = PrimPat desc Nothing
+
+partialPrimPat :: String -> DC.Pat PatDesc () () -> PrimPat
+partialPrimPat cav desc = PrimPat desc (Just cav)
 
 data PatDesc
   = SpecificLit S.Literal
-  | AnyInt
+  | AnonHole PatLitTy
+  | NameHole String PatLitTy
+  deriving (Show, Eq)
+
+data PatLitTy
+  = AnyInt
   | AnyFlt
   | AnyNum
   | AnyStr
   | CustomPat String
   deriving (Show, Eq)
 
+instance Pretty PrimPat where
+  pretty (PrimPat desc Nothing)    = prettyBlankPat desc
+  pretty (PrimPat desc (Just cav)) = sep [prettyBlankPat desc,
+                                          pretty "where", pretty cav]
+
 instance Pretty PatDesc where
   pretty (SpecificLit i) = pretty i
-  pretty AnyInt = pretty "_:integer"
-  pretty AnyFlt = pretty "_:float"
-  pretty AnyNum = pretty "_:number"
-  pretty AnyStr = pretty "_:string"
-  pretty (CustomPat desc) = pretty "_:" <> pretty desc
+  pretty (AnonHole t)    = pretty "_" <> colon <> pretty t
+  pretty (NameHole x t)  = pretty x <> colon <> pretty t
+
+instance Pretty PatLitTy where
+  pretty AnyInt = pretty "int"
+  pretty AnyFlt = pretty "float"
+  pretty AnyNum = pretty "number"
+  pretty AnyStr = pretty "string"
+  pretty (CustomPat desc) = pretty desc
 
 data PrimOp x i o a m
   = POp { opName  :: Txt.Text,
@@ -131,6 +153,7 @@ data ReplError
   | DualPolarityErr (DC.PolarityError ExecId S.Literal)
   | DualTypeErr (DC.TypeError ExecId S.Literal)
   | RuntimeErr ExecError
+  | HaskellErr IOError
   deriving (Show)
 
 data ExecError
@@ -166,6 +189,10 @@ instance Pretty ReplError where
   pretty (RuntimeErr err) = hsep
     [ pretty "Runtime Error:",
       pretty err ]
+  pretty (HaskellErr err) = vsep
+    [ pretty "Primitive Runtime Error:",
+      mempty,
+      pretty $ displayException err ]
 
 instance Pretty ExecError where
   pretty (UnhandledPattern o ps v) = vsep
@@ -178,7 +205,7 @@ instance Pretty ExecError where
   pretty (UnhandledPrimArg name ps v) = vsep
     [ pretty "Unhandled argument to" <+> pretty name <+> pretty "operation.",
       pretty "Found:" <+> prettyShortVal v,
-      pretty "Expected:" <+> align (vsep $ prettyBlankPat <$> ps) ]
+      pretty "Expected:" <+> align (vsep $ pretty <$> ps) ]
   pretty (ExpectedData o t u) = vsep
     [ pretty "Expected a data-creating action in the"
       <+> pretty o
@@ -514,7 +541,7 @@ gatherMultiLineInput ln more = do
         (Just _,  Right BeginMultiLine) -> do
           liftIO $ putStrLn "# already reading a multi-line statement"
           gatherMultiLineInput ln more
-        (Nothing, Right (ExecuteFile path)) -> liftIO $ readFile path
+        (Nothing, Right (ExecuteFile path)) -> readScriptFile path
         (Just _,  Right (ExecuteFile _))    -> do
           liftIO $ putStrLn "# cannot execute a file during multi-line input"
           gatherMultiLineInput ln more
@@ -938,7 +965,8 @@ unaryNumFun name i f o v@(Struc p) = case p of
   (S.Int x :@: MT) :*: C k -> sendToCls o (i x) k
   (S.Flt x :@: MT) :*: C k -> sendToCls o (f x) k
   _                        ->
-    throwError $ RuntimeErr $ UnhandledPrimArg name [(AnyNum :@: MT) :*: C()] v
+    throwError $ RuntimeErr $ UnhandledPrimArg name expected v
+  where expected = [totalPrimPat $ (AnonHole AnyNum :@: MT) :*: C()]
 
 binaryNumOp2 :: String
              -> (Integer -> Integer -> ExecVal)
@@ -978,7 +1006,9 @@ binaryNumFun name i_i f_i i_f f_f o v@(Struc p) = case p of
   (S.Int x :@: MT) :*: ((S.Flt y :@: MT) :*: C k)
     -> sendToCls o (i_f x y) k
   _ -> throwError $ RuntimeErr
-     $ UnhandledPrimArg name [(AnyNum :@: MT) :*: ((AnyNum :@: MT) :*: C ())] v
+     $ UnhandledPrimArg name expected v
+  where expected = [totalPrimPat $
+                    (AnonHole AnyNum :@: MT) :*: ((AnonHole AnyNum :@: MT) :*: C ())]
 
 onUnaryLit :: (b -> S.Literal)
            -> (a -> b)
@@ -1006,8 +1036,9 @@ equalityOp = POp {
   applyOp = \o v@(Struc p) -> case p of
       x :*: (y :*: C k)
         -> sendToCls o (onBinaryBool (==) x y) k
-      _ -> throwError $ RuntimeErr $ UnhandledPrimArg "==" [A () :*: (A () :*: C ())] v
+      _ -> throwError $ RuntimeErr $ UnhandledPrimArg "==" expected v
   }
+  where expected = [totalPrimPat $ A () :*: (A () :*: C ())]
 
 notEqualityOp :: OpIO
 notEqualityOp = POp {
@@ -1015,8 +1046,9 @@ notEqualityOp = POp {
   applyOp = \o v@(Struc p) -> case p of
       x :*: (y :*: C k)
         -> sendToCls o (onBinaryBool (/=) x y) k
-      _ -> throwError $ RuntimeErr $ UnhandledPrimArg "/=" [A () :*: (A () :*: C ())] v
+      _ -> throwError $ RuntimeErr $ UnhandledPrimArg "/=" expected v
   }
+  where expected = [totalPrimPat $ A () :*: (A () :*: C ())]
 
 lessThanOp :: OpIO
 lessThanOp = binaryNumOp2 "<" (onBinaryBool (<)) (onBinaryBool (<))
@@ -1047,27 +1079,74 @@ divideFun o v@(Struc p) = case p of
     | y /= 0
       -> sendToCls o (onBinaryLit S.Int div x y) k
   (S.Flt x :@: MT) :*: ((S.Flt y :@: MT) :*: C k)
-    | y /= 0
-      -> sendToCls o (onBinaryLit S.Flt (/) x y) k
+    -> sendToCls o (onBinaryLit S.Flt (/) x y) k
   (S.Flt x :@: MT) :*: ((S.Int y :@: MT) :*: C k)
-    | y /= 0
-      -> sendToCls o (onBinaryLit S.Flt (/) x (fromInteger y)) k
+    -> sendToCls o (onBinaryLit S.Flt (/) x (fromInteger y)) k
   (S.Int x :@: MT) :*: ((S.Flt y :@: MT) :*: C k)
-    | y /= 0
-      -> sendToCls o (onBinaryLit S.Flt (/) (fromInteger x) y) k
+    -> sendToCls o (onBinaryLit S.Flt (/) (fromInteger x) y) k
   _ -> throwError $ RuntimeErr $ UnhandledPrimArg "/" expected v
-     where expected = [(AnyNum :@: MT) :*: ((CustomPat "nonzero" :@: MT) :*: C ())]
+     where expected =
+             [partialPrimPat "x /= 0" $
+               ((AnonHole AnyInt :@: MT) :*: ((NameHole "x" AnyInt :@: MT) :*: C ())),
+              totalPrimPat $
+               (AnonHole AnyFlt :@: MT) :*: ((AnonHole AnyNum :@: MT) :*: C ()),
+              totalPrimPat $
+               (AnonHole AnyNum :@: MT) :*: ((AnonHole AnyFlt :@: MT) :*: C ())]
 
 
 moduloOp :: OpIO
-moduloOp = binaryNumOp2 "%" (onBinaryLit S.Int mod) (onBinaryLit S.Flt mod')
+-- moduloOp = binaryNumOp2 "%" (onBinaryLit S.Int mod) (onBinaryLit S.Flt mod')
+moduloOp = POp { opName = Txt.pack "%", applyOp = moduloFun }
+
+moduloFun o v@(Struc p) = case p of
+  (S.Int x :@: MT) :*: ((S.Int y :@: MT) :*: C k)
+    | y /= 0
+      -> sendToCls o (onBinaryLit S.Int mod x y) k
+  (S.Flt x :@: MT) :*: ((S.Flt y :@: MT) :*: C k)
+    | y /= 0
+      -> sendToCls o (onBinaryLit S.Flt mod' x y) k
+  (S.Flt x :@: MT) :*: ((S.Int y :@: MT) :*: C k)
+    | y /= 0
+      -> sendToCls o (onBinaryLit S.Flt mod' x (fromInteger y)) k
+  (S.Int x :@: MT) :*: ((S.Flt y :@: MT) :*: C k)
+    | y /= 0
+      -> sendToCls o (onBinaryLit S.Flt mod' (fromInteger x) y) k
+  _ -> throwError $ RuntimeErr $ UnhandledPrimArg "/" expected v
+     where expected =
+             [partialPrimPat "x /= 0" $
+              (AnonHole AnyNum :@: MT) :*: ((NameHole "x" AnyNum:@: MT) :*: C ())]
 
 exponentOp :: OpIO
+{-
 exponentOp = binaryNumOp "^"
   (onBinaryLit S.Int (^))
   (onBinaryLit S.Flt (^))
   (onBinaryLit S.Flt (\x y -> fromInteger x ** y))
   (onBinaryLit S.Flt (**))
+-}
+exponentOp = POp { opName = Txt.pack "^", applyOp = exponentFun }
+
+exponentFun o v@(Struc p) = case p of
+  (S.Int x :@: MT) :*: ((S.Int y :@: MT) :*: C k)
+    | y >= 0
+      -> sendToCls o (onBinaryLit S.Int (^) x y) k
+  (S.Flt x :@: MT) :*: ((S.Flt y :@: MT) :*: C k)
+    -> sendToCls o (onBinaryLit S.Flt (**) x y) k
+  (S.Flt x :@: MT) :*: ((S.Int y :@: MT) :*: C k)
+    | y >= 0
+      -> sendToCls o (onBinaryLit S.Flt (^) x y) k
+    | otherwise
+      -> sendToCls o (onBinaryLit S.Flt (**) x (fromInteger y)) k
+  (S.Int x :@: MT) :*: ((S.Flt y :@: MT) :*: C k)
+    -> sendToCls o (onBinaryLit S.Flt (**) (fromInteger x) y) k
+  _ -> throwError $ RuntimeErr $ UnhandledPrimArg "^" expected v
+    where expected =
+            [partialPrimPat "x >= 0" $
+              (AnonHole AnyInt :@: MT) :*: ((NameHole "x" AnyInt :@: MT) :*: C()),
+             totalPrimPat $
+              (AnonHole AnyFlt :@: MT) :*: ((AnonHole AnyNum :@: MT) :*: C ()),
+             totalPrimPat $
+              (AnonHole AnyNum :@: MT) :*: ((AnonHole AnyFlt :@: MT) :*: C ())]
 
 toFloatOp :: OpIO
 toFloatOp = POp {
@@ -1078,7 +1157,7 @@ toFloatOp = POp {
       num@(S.Flt _ :@: MT) :*: C k
         -> sendToCls o (Struc num) k
       _ -> throwError $ RuntimeErr $ UnhandledPrimArg "float" expected v
-        where expected = [(AnyNum :@: MT) :*: C ()]
+        where expected = [totalPrimPat $ (AnonHole AnyNum :@: MT) :*: C ()]
   }
 
 renameFloatOp :: OpIO -> OpIO
@@ -1110,7 +1189,9 @@ strConcatOp = POp {
       (S.Str s1 :@: MT) :*: ((S.Str s2 :@: MT) :*: C k)
         -> sendToCls o (onBinaryLit S.Str (<>) s1 s2) k
       _ -> throwError $ RuntimeErr $ UnhandledPrimArg "concat" expected v
-        where expected = [(AnyStr :@: MT) :*: ((AnyStr :@: MT) :*: C ())]
+        where expected =
+                [totalPrimPat $
+                  (AnonHole AnyStr :@: MT) :*: ((AnonHole AnyStr :@: MT) :*: C ())]
   }
 
 printOp :: OpIO
@@ -1120,8 +1201,9 @@ printOp = POp {
       (S.Str s :@: MT) :*: C k
         -> do liftIO $ putStrLn $ Txt.unpack s
               sendToCls o (Struc MT) k
-      _ -> throwError $ RuntimeErr $ UnhandledPrimArg "print" [(AnyStr :@: MT) :*: C ()] v
+      _ -> throwError $ RuntimeErr $ UnhandledPrimArg "print" expected v
   }
+  where expected = [totalPrimPat $ (AnonHole AnyStr :@: MT) :*: C ()]
 
 pprintOp :: OpIO
 pprintOp = POp {
@@ -1130,8 +1212,9 @@ pprintOp = POp {
       (p :*: C k)
         -> do liftIO $ putDoc $ prettyShortVal (Struc p) <> hardline
               sendToCls o (Struc MT) k
-      _ -> throwError $ RuntimeErr $ UnhandledPrimArg "print" [A () :*: C ()] v
+      _ -> throwError $ RuntimeErr $ UnhandledPrimArg "print" expected v
   }
+  where expected = [totalPrimPat $ A () :*: C ()]
 
 exitProgPOp :: OpIO
 exitProgPOp = POp { opName = Txt.pack "exit",
@@ -1146,13 +1229,21 @@ runFileOp = POp {
               fc <- loadFileForExecution path
               captureNextJoinAs k
               return fc
-      _ -> throwError $ RuntimeErr $ UnhandledPrimArg "run_file" [pat] v
-        where pat = (CustomPat "_:filepath" :@: MT) :*: C ()
+      _ -> throwError $ RuntimeErr $ UnhandledPrimArg "run_file" expected v
   }
+  where expected =
+          [totalPrimPat $ (AnonHole (CustomPat "filepath") :@: MT) :*: C ()]
+
+readScriptFile :: FilePath -> ReplIO String
+readScriptFile path = do
+  x <- liftIO $ Control.Monad.Catch.try $ readFile path
+  case x of
+    Right txt -> return txt
+    Left  err -> throwError $ HaskellErr err
 
 loadFileForExecution :: FilePath -> ReplIO ExecCmd
 loadFileForExecution path = do
-  txt <- liftIO $ readFile path
+  txt <- readScriptFile path
   processCommand path txt
 {-
 loadFileForExecution path = do
