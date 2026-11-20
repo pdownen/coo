@@ -284,9 +284,9 @@ using
 
 > cabal run
 
-There is also a provided short `setup.hs` script that performs these two
+There is also a provided short `setup.sh` script that performs these two
 commands in sequence, building the language implementation and then running it
-on a short Coo program to ensure that it is working and available.  `setup.hs`
+on a short Coo program to ensure that it is working and available.  `setup.sh`
 assumes that you already have GHC and Cabal installed on your system.
 
 
