@@ -11,7 +11,7 @@ import Prettyprinter
 main :: IO ()
 main = do
   setLocaleEncoding utf8
-  opts <- execParser cli
+  opts <- impliedOpts <$> execParser cli
   let initOpts = RO{ typeOption = initTypeOption opts,
                      stopAfterTypes = checkOnly opts,
                      batchOption = not $ isNothing $ scriptFile opts,
@@ -77,3 +77,11 @@ cliDumpOpt = switch
            $ long "dumpdc"
            <> short 'd'
            <> help "dump internal Dual Core representations"
+
+impliedOpts :: CommandOptions -> CommandOptions
+impliedOpts opts = opts{ initTypeOption = checkImpliesTypes opts }
+
+checkImpliesTypes :: CommandOptions -> TypeCheckingOption
+checkImpliesTypes opts@CmdOpt{ initTypeOption = IgnoreTypes }
+  | checkOnly opts     = TypeWarnings
+checkImpliesTypes opts = initTypeOption opts
