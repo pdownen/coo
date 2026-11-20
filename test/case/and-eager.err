@@ -1,3 +1,5 @@
 Runtime Error: Unhandled argument to / operation.
 Found: 10, 0, {...}
-Expected: _:number, _:nonzero, {_}
+Expected: _:int, x:int, {_}   if x /= 0
+          _:float, _:number, {_}
+          _:number, _:float, {_}
